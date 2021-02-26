@@ -46,11 +46,12 @@ NODE_REQ = {
         }
 
 verbose = False
-network = {}
-discovery = True
-disc_list = []
 beacon_list = []
-print_beacons = True
+subnet_list = []
+app_key_list = []
+node_list = []
+node = {}
+prov_result = {}
 live = True
 resp_sem = threading.Semaphore(0)
 
@@ -63,56 +64,77 @@ def uint8(number):
 def uint16(number):
     return '0x{:04x}'.format(number)
 
-def print_beacon_list(event):
-    global resp_sem
+def print_beacon_list():
     global beacon_list
 
-    beacon_list = []
+    for beacon in beacon_list:
+        print('    Device Type: ' + beacon['deviceType'])
+        print('    UUID       : ' + beacon['uuid'])
+        print('    OOB Info   : ' + beacon['oobInfo'])
+        print('    URI Hash   : ' + str(beacon['uriHash']) + '\n')
 
-    for beacon in event['beacons']:
-        beacon_list.append(beacon['uuid'])
-
-        if print_beacons:
-            print('    Device Type: ' + beacon['deviceType'])
-            print('    UUID       : ' + beacon['uuid'])
-            print('    OOB Info   : ' + beacon['oobInfo'])
-            print('    URI Hash   : ' + str(beacon['uriHash']) + '\n')
-
-    if len(event['beacons']) == 0 and print_beacons:
+    if len(beacon_list) == 0:
         print('    No Beacons\n')
 
-    resp_sem.release()
+def print_subnets():
+    global subnet_list
 
-def print_subnets(network):
     print('Subnets:')
-    for subnet in network['subnets']:
+    for subnet in subnet_list:
         print('  - ' + uint16(subnet['netIndex']))
-    if len(network['subnets']) == 0:
+    
+    if len(subnet_list) == 0:
         print('    No Subnets')
+    
     print()
 
-def print_app_keys(network):
+def print_app_keys():
+    global app_key_list
+
     print('Application Keys')
     print('    App Index : Net Index')
-    for app_key in network['app_keys']:
+    for app_key in app_key_list:
         print('     - ' + uint16(app_key['appIndex']) + ' : ' + uint16(app_key['netIndex']))
-    if len(network['app_keys']) == 0:
+    
+    if len(app_key_list) == 0:
         print('     No Application Keys')
+    
     print()
 
-def print_nodes(network):
+def print_prov_result():
+    global prov_result
+
+    if prov_result['error'] != 0:
+        print('Failed to provision device with UUID: ' + prov_result['uuid'])
+        print('    Error: ' + int(prov_result['error']))
+        return
+
+    print('Provision Result:')
+    print('  - UUID         : ' + prov_result['uuid'])
+    print('  - Net Index    : ' + uint16(prov_result['netIndex']))
+    print('  - Address      : ' + uint16(prov_result['address']))
+    print('  - Element Count: ' + uint16(prov_result['elementCount']))
+    print()
+
+def print_nodes():
+    global node_list
+
     print('Network Nodes:')
-    for node in network['nodes']:
-        if node == 1:
-            print('  - ' + uint16(node) + ' (Gateway)')
+    for node in node_list:
+        if node['address'] == 1:
+            print('    Address      : ' + uint16(node['address']) + ' (Gateway)')
         else:
-            print('  - ' + uint16(node))
-    print()
+            print('    Address      : ' + uint16(node['address']))
+        print('    Device Type  : ' + node['deviceType'])
+        print('    UUID         : ' + node['uuid'])
+        print('    Network Index: ' + uint16(node['netIndex']))
+        print('    Element Count: ' + str(node['elementCount']))
+        print()
 
-def print_node(address):
-    node = network['nodes'][address]
+def print_node():
+    global node
 
-    print('Node: ' + uint16(address))
+    print('Node: ' + uint16(node['address']))
     print('    UUID: ' + node['uuid'])
     print('    CID : ' + uint16(node['cid']))
     print('    PID : ' + uint16(node['pid']))
@@ -172,7 +194,7 @@ def print_node(address):
         print('        - ' + uint16(subnet))
 
     for idx, element in enumerate(node['elements']):
-        if element['address'] == address:
+        if element['address'] == node['address']:
             print('    Element ' + uint16(idx) + ' (PRIMARY):')
         else:
             print('    Element ' + uint16(idx) + ':')
@@ -223,8 +245,7 @@ def print_node(address):
             print('            Period                : ' + uint8(pub['period']))
             print('            Period Units          : ' + pub['periodUnits'])
             print('            Retransmit Count      : ' + uint8(pub['retransmitCount']))
-            print('            Retransmit Interval   : ' + uint8(pub['retransmitInterval']))
-            print()
+            print('            Retransmit Interval   : ' + uint8(pub['retransmitInterval']) + '\n')
 
 def build_node_disc_json(address):
     node_disc = {
@@ -268,41 +289,38 @@ def get_choice(options):
 
 def beacon_request():
     ''' Request a list of unprovisioned beacons from the gateway '''
-    global client
-    global c2g_topic
     global resp_sem
-    global print_beacons
 
-    print_beacons = True
-
-    print("Publishing beacon request...\n")
+    print("Acquiring unprovisioned device beacons from gateway...\n")
     publish(BEACON_REQ)
     resp_sem.acquire()
+    print_beacon_list()
 
 def provision():
     global beacon_list
-    global print_beacons
     global resp_sem
 
-    print("Getting unprovisioned device beacons...")
-    print_beacons = False
+    print("Getting unprovisioned device beacons from gateway...\n")
     publish(BEACON_REQ)
     resp_sem.acquire()
 
     if len(beacon_list) == 0:
-        print('No device beacons to provision')
+        print('No device beacons to provision\n')
         return
 
+    choices = []
+    for beacon in beacon_list:
+        choices.append(beacon['uuid'])
     print("Which device would you like to provision?")
-    choice = get_choice(beacon_list)
+    choice = get_choice(choices)
     
-    uuid = beacon_list[choice]
+    uuid = choices[choice]
     print('Provisioning ' + uuid)
     net_idx = int(input('Enter 16-bit network index: '))
     addr = int(input('Enter 16-bit address: '))
     attn_time = int(input('Enter the attention timer for the provisioning process: '))
 
-    print('Sending provision request. This may take several minutes...\n')
+    print('Sending provision device request. This may take several minutes...\n')
     prov = {
             'id': 'randomId',
             'type': 'operation',
@@ -314,13 +332,13 @@ def provision():
                 'attentionTime': attn_time
                 }
             }
-
     publish(prov)
     resp_sem.acquire()
+    print_prov_result()
 
 def subnet_menu():
-    global network
     global resp_sem
+    global subnet_list
 
     choices = ['Add Subnet', 'Generate Subnet', 'Delete Subnet', 'Get Subnets']
     print('SUBNET CONFIGURATION MENU')
@@ -341,7 +359,7 @@ def subnet_menu():
         print('Adding subnet...')
         publish(subnet_add)
         resp_sem.acquire()
-        print_subnets(network)
+        print_subnets()
 
     elif choice == 1:
         net_idx = int(input('Enter unsigned 16-bit network index: '), 0)
@@ -356,14 +374,14 @@ def subnet_menu():
         print('Generating subnet...')
         publish(subnet_gen)
         resp_sem.acquire()
-        print_subnets(network)
+        print_subnets()
         
     elif choice == 2:
         publish(SUBNET_REQ)
         resp_sem.acquire()
         
         choices = []
-        for subnet in network['subnets']:
+        for subnet in subnet_list:
             if subnet['netIndex'] != 0:
                 choices.append(uint16(subnet['netIndex']))
 
@@ -371,7 +389,7 @@ def subnet_menu():
             print('No subnets to delete')
             return
 
-        print('which subnet would you like to delete?')
+        print('Which subnet would you like to delete?')
         choice = get_choice(choices)
         
         subnet_del = {
@@ -385,17 +403,18 @@ def subnet_menu():
         print('Deleteing subnet...')
         publish(subnet_del)
         resp_sem.acquire()
-        print_subnets(network)
+        print_subnets()
 
     elif choice == 3:
         print('Getting subnets...')
         publish(SUBNET_REQ)
         resp_sem.acquire()
-        print_subnets(network)
+        print_subnets()
 
 def app_key_menu():
-    global network
     global resp_sem
+    global app_key_list
+    global subnet_list
 
     choices = ['Add Application Key', 'Generate Application Key', 'Delete Application Key',
             'Get Application Keys']
@@ -407,7 +426,7 @@ def app_key_menu():
         resp_sem.acquire()
 
         choices = []
-        for subnet in network['subnets']:
+        for subnet in subnet_list:
             choices.append(uint16(subnet['netIndex']))
 
         print('Which subnet will the new application key part be a part of?')
@@ -429,14 +448,14 @@ def app_key_menu():
         print('Adding application key...')
         publish(app_key_add)
         resp_sem.acquire()
-        print_app_keys(network)
+        print_app_keys()
 
     elif choice == 1:
         publish(SUBNET_REQ)
         resp_sem.acquire()
 
         choices = []
-        for subnet in network['subnets']:
+        for subnet in subnet_list:
             choices.append(uint16(subnet['netIndex']))
 
         print('Which subnet will the generated application key be a part of?')
@@ -456,14 +475,14 @@ def app_key_menu():
         print('Generating application key...')
         publish(app_key_gen)
         resp_sem.acquire()
-        print_app_keys(network)
+        print_app_keys()
 
     elif choice == 2:
         publish(APP_KEY_REQ)
         resp_sem.acquire()
 
         choices = []
-        for app_key in network['app_keys']:
+        for app_key in app_key_list:
             choices.append(uint16(app_key['appIndex']))
 
         print('Which application key would you like to delete?')
@@ -481,41 +500,47 @@ def app_key_menu():
         print('Deleting application key...')
         publish(app_key_del)
         resp_sem.acquire()
-        print_app_keys(network)
+        print_app_keys()
 
     elif choice == 3:
         print('Getting application keys...')
         publish(APP_KEY_REQ)
         resp_sem.acquire()
-        print_app_keys(network)
+        print_app_keys()
 
 def node_request():
+    global resp_sem
+
     print('Getting network nodes from gateway...')
     publish(NODE_REQ)
     resp_sem.acquire()
-    print_nodes(network)
-
+    print_nodes()
 
 def node_discover():
-    print('Acquiring nodes from gateway...')
+    global resp_sem
+    global node_list
+    global node
+
+    print('Acquiring nodes from gateway...\n')
     publish(NODE_REQ)
     resp_sem.acquire()
 
     choices = []
-    for node in network['nodes']:
-        if node != 1:
-            choices.append(uint16(node))
+    for node in node_list:
+        if node['address'] != 1:
+            choices.append(uint16(node['address']))
 
     if len(choices) == 0:
         print('No nodes in network to discover\n')
         return
 
-    print('\nWhich node would you like to discover?')
+    print('Which node would you like to discover?')
     choice = get_choice(choices)
 
-    print('\nDiscovering node. This may take a few minutes...')
+    print('Discovering node. This may take a few minutes...')
     publish(build_node_disc_json(int(choices[choice], 0)))
     resp_sem.acquire()
+    print_node()
 
 def node_configure():
     return
@@ -561,155 +586,65 @@ def main_menu():
         elif choice == 7:
             reset()
 
-def prov_result(event):
+def prov_result_evt(event):
     global resp_sem
+    global prov_result
 
-    print('Provision Result')
-    print('Error code   : ' + str(event['error']))
-    print('UUID         : ' + event['uuid'])
-    print('Net Index    : ' + uint16(event['netIndex']))
-    print('Address      : ' + uint16(event['address']))
-    print('Element Count: ' + uint16(event['elementCount']))
-    
-    address = event['address']
+    del event['type']
+    del event['timestamp']
+    prov_result = event.copy()
 
-    #print('\nPerforming discovery of new node...')
-    #publish(build_node_disc_json(event['address']))
-    #resp_sem.acquire()
-    #print_node(address)
-    print()
-    print('582 release')
     resp_sem.release()
 
-def subnet_list(event):
-    global network
-    global discovery
+def beacon_list_evt(event):
     global resp_sem
+    global beacon_list
 
-    network['subnets'] = event['subnetList'].copy()
+    beacon_list = event['beacons'].copy()
+    resp_sem.release()
 
-    if discovery:
-        print_subnets(network)
-        publish(APP_KEY_REQ)
-    else:
-        resp_sem.release()
-
-def app_key_list(event):
-    global network
-    global discovery
+def subnet_list_evt(event):
     global resp_sem
+    global subnet_list
 
-    network['app_keys'] = event['appKeyList'].copy()
-    if discovery:
-        print_app_keys(network)
-        publish(NODE_REQ)
-    else:
-        resp_sem.release()
+    subnet_list = event['subnetList'].copy()
+    resp_sem.release()
 
-def node_list(event):
-    global network
-    global discovery
-    global disc_idx
-    global disc_list
+def app_key_list_evt(event):
     global resp_sem
+    global app_key_list
 
-    if discovery:
-        print("Node List discovery")
-        network['nodes'] = {}
+    app_key_list = event['appKeyList'].copy()
+    resp_sem.release()
 
-        for node in event['nodes']:
-            network['nodes'][node['address']] = {}
-
-            if node['address'] != 1:
-                disc_list.append(node['address'])
-
-            print_nodes(network)
-            
-            if len(disc_list) == 0:
-                discovery = False
-                print('630 release')
-                resp_sem.release()
-            else:
-                disc_idx = 0
-                publish(build_node_disc_json(disc_list[disc_idx]))
-    else:
-        # Check if any nodes are no longer part of the network
-        for net_node in network['nodes']:
-            not_net_node = True
-            for node in event['nodes']:
-                if net_node == node['address']:
-                    not_net_node = False
-                    break
-            if not_net_node:
-                del net_node
-
-        # Check to see if there are any new nodes to add
-        disc_list = []
-        for node in event['nodes']:
-            already_net_node = False
-            for net_node in network['nodes']:
-                if node['address'] == net_node:
-                    already_net_node = True
-                    break;
-            if already_net_node:
-                continue
-            else:
-                discovery = True
-                network['nodes'][node['address']] = {}
-                disc_list.append(node['address'])
-        
-        if discovery:
-            print('New network nodes found, discovery in progress...')
-            disc_idx = 0
-            publish(build_node_disc_json(disc_list[disc_idx]))
-            resp_sem.acquire()
-       
-        print('668 release')
-        resp_sem.release()
-
-def node_disc(event):
-    global network
-    global discovery
-    global disc_idx
-    global disc_list
+def node_list_evt(event):
     global resp_sem
+    global node_list
+
+    node_list = event['nodes'].copy()
+    resp_sem.release()
+
+def node_disc_evt(event):
+    global resp_sem
+    global node
 
     if event['error'] != 0:
         print('Error performing node discovery: ' + str(event['error']))
-        if not discovery:
-            print('681 release')
-            resp_sem.release()
+        resp_sem.release()
         return
 
     if event['status'] != 0:
         print('Status performing node discovery: ' + str(event['status']))
-        if not discovery:
-            print('688 release')
-            resp_sem.release()
+        resp_sem.release()
         return
 
-    address = event['address']
     del event['type']
     del event['timestamp']
     del event['error']
     del event['status']
-    del event['address']
-    network['nodes'][address] = event.copy()
-    print_node(address)
-
-    if discovery:
-        disc_idx = disc_idx + 1
-        if disc_idx >= len(disc_list):
-            discovery = False
-            print('704 release')
-            resp_sem.release()
-        else:
-            print('its actually else')
-            publish(build_node_disc_json(disc_list[disc_idx]))
-    else:
-        print('710 release')
-        resp_sem.release()
-
+   
+    node = event.copy()
+    resp_sem.release()
 
 def on_connect(client, _userdata, _flags, r_c):
     '''On MQTT broker connect callback'''
@@ -739,12 +674,12 @@ def on_message(_client, _userdata, msg):
     if event['type'] == 'beacon_list':
         if verbose:
             print('Recieved beacon list event')
-        print_beacon_list(event)
+        beacon_list_evt(event)
 
     elif event['type'] == 'provision_result':
         if verbose:
             print('Recieved provision result event')
-        prov_result(event)
+        prov_result_evt(event)
 
     elif event['type'] == 'reset_result':
         if verbose:
@@ -753,22 +688,22 @@ def on_message(_client, _userdata, msg):
     elif event['type'] == 'subnet_list':
         if verbose:
             print('Recieved subnet list event')
-        subnet_list(event)
+        subnet_list_evt(event)
 
     elif event['type'] == 'app_key_list':
         if verbose:
             print('Recieved app key list event')
-        app_key_list(event)
+        app_key_list_evt(event)
 
     elif event['type'] == 'node_list':
         if verbose:
             print('Recieved node list event')
-        node_list(event)
+        node_list_evt(event)
 
     elif event['type'] == 'node_discover_result':
         if verbose:
             print('Recieved node discover result event')
-        node_disc(event)
+        node_disc_evt(event)
 
     else:
         print("ERROR: Unrecognized event: " + event['type'])
@@ -782,9 +717,7 @@ def on_subscribe(client, _userdata, _midi, granted_qos):
     print('Subscribed to ' + g2c_topic)
     print('QOS: ' + str(granted_qos) + '\n')
 
-    # TODO Perform network discovery here!
-    print('Performing network discovery...')
-    publish(SUBNET_REQ)
+    resp_sem.release()
 
 def http_req(req_url, req_api_key):
     ''' Make an HTTP request '''
