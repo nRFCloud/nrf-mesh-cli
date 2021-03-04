@@ -1,4 +1,4 @@
-# Nordic Python LTE CLI for Mesh Gateway Interfacing
+# nRF Cloud Remote CLI for Mesh Gateway Interfacing
 
 This python program allows the user to interface with a connected nRF Cloud Connected Mesh Gateway.
 
