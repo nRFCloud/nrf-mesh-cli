@@ -53,6 +53,7 @@ app_key_list = []
 node_list = []
 node = {}
 prov_result = {}
+subsciption_list = {}
 live = True
 sem = threading.BoundedSemaphore(1)
 
@@ -147,7 +148,11 @@ def print_nodes():
         print('    UUID         : ' + node['uuid'])
         print('    Network Index: ' + uint16(node['netIndex']))
         print('    Element Count: ' + str(node['elementCount']))
-        print()
+        
+    if len(node_list) == 0:
+        print('    No Nodes')
+
+    print()
 
 def print_node():
     global node
@@ -274,6 +279,18 @@ def print_node():
             print('                Retransmit Count      : ' + uint8(pub['retransmitCount']))
             print('                Retransmit Interval   : ' + uint8(pub['retransmitInterval']))
             print()
+
+def print_subscription_list():
+    global subscription_list
+
+    print('Subscribed Addresses:')
+    for sub in subscription_list:
+        print('  - ' + uint16(sub['address']))
+
+    if len(subscription_list) == 0:
+        print('    No subscribed addresses')
+
+    print()
 
 def build_node_disc_json(address):
     node_disc = {
@@ -1026,7 +1043,93 @@ def node_configure():
     print_node()
 
 def reset():
+    # TODO
     return
+
+def subscribe_menu():
+    global subscription_list
+
+    choices = [
+            'Subscribe',
+            'Unsubscribe',
+            'Get subscription list'
+            ]
+    print('SUBSCRIPTION CONFIGURATION MENU');
+    choice = get_choice(choices);
+
+    if choice == 0:
+        # Subscribe
+        addr = int(input('Enter unsigned 16-bit mesh address to subscribe to: '), 0)
+        subscribe = {
+                'id': 'randomId',
+                'type': 'operation',
+                'operation': {
+                    'type': 'subscribe',
+                    'address_list': [
+                        {
+                            'address': addr
+                            }
+                        ]
+                    }
+                }
+        print('Subscribing...')
+        publish(subscribe)
+        if not sem_acquire():
+            return
+        print_subscription_list()
+
+    elif choice == 1:
+        # Unsubscribe
+        subscribe_list_req = {
+                'id': 'randomId',
+                'type': 'operation',
+                'operation': {
+                    'type': 'subscribe_list_request'
+                    }
+                }
+        print('Acquiring subscription list...')
+        publish(subscribe_list_req)
+        if not sem_acquire():
+            return
+
+        choices = []
+        for sub in subscription_list:
+            choices.append(uint16(sub['address']))
+
+        print('Which address would you to like to unsubscribe from?')
+        addr = int(choices[get_choice(choices)], 0)
+        unsubscribe = {
+                'id': 'randomId',
+                'type': 'operation',
+                'operation': {
+                    'type': 'unsubscribe',
+                    'address_list': [
+                        {
+                            'address': addr
+                            }
+                        ]
+                    }
+                }
+        print('Unsubscribing...')
+        publish(unsubscribe)
+        if not sem_acquire():
+            return
+        print_subscription_list()
+
+    elif choice == 2:
+        # Get subscriptin list
+        subscribe_list_req = {
+                'id': 'randomId',
+                'type': 'operation',
+                'operation': {
+                    'type': 'subscribe_list_request'
+                    }
+                }
+        print('Acquiring subscription list...')
+        publish(subscribe_list_req)
+        if not sem_acquire():
+            return
+        print_subscription_list()
 
 def main_menu():
     global live
@@ -1043,6 +1146,7 @@ def main_menu():
                 'Discover a network node',
                 'Configure a network node',
                 'Reset a network node',
+                'Configure mesh model subscriptions'
                 ]
 
         print("MAIN MENU")
@@ -1066,6 +1170,8 @@ def main_menu():
             node_configure()
         elif choice == 7:
             reset()
+        elif choice == 8:
+            subscribe_menu()
 
 def prov_result_evt(event):
     global prov_result
@@ -1123,6 +1229,12 @@ def node_disc_evt(event):
     del event['status']
    
     node = event.copy()
+    sem_release()
+
+def subscribe_list_evt(event):
+    global subscription_list
+
+    subscription_list = event['address_list'].copy()
     sem_release()
 
 def on_connect(client, _userdata, _flags, r_c):
@@ -1184,6 +1296,11 @@ def on_message(_client, _userdata, msg):
         if verbose:
             print('Recieved node discover result event')
         node_disc_evt(event)
+    
+    elif event['type'] == 'subscribe_list':
+        if verbose:
+            print('Recieved subscribe list event')
+        subscribe_list_evt(event)
 
     else:
         print("ERROR: Unrecognized event: " + event['type'])
