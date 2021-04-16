@@ -9,6 +9,7 @@ import paho.mqtt.publish as publish
 import sync_sem
 import mesh_beacons
 import mesh_subnets
+import mesh_app_keys
 from byte_codec import uint8
 from byte_codec import uint16
 
@@ -17,14 +18,6 @@ DEV_URL = 'https://api.nrfcloud.com/v1/devices'
 AUTH_BEARER_PREFIX = 'Bearer '
 PORT                = 8883
 KEEP_ALIVE          = 30
-
-APP_KEY_REQ = {
-        'id': 'randomId',
-        'type': 'operation',
-        'operation': {
-            'type': 'app_key_request'
-            }
-        }
 
 NODE_REQ = {
         'id': 'randomId',
@@ -219,7 +212,6 @@ MODEL_MSG_OPCODES = {
 
 
 verbose = False
-app_key_list = []
 node_list = []
 node = {}
 prov_result = {}
@@ -231,19 +223,6 @@ tid = 0
 
 def publish(msg):
     client.publish(c2g_topic, payload=json.dumps(msg), qos=0, retain=False)
-
-def print_app_keys():
-    global app_key_list
-
-    print('Application Keys')
-    print('    App Index : Net Index')
-    for app_key in app_key_list:
-        print('     - ' + uint16(app_key['appIndex']) + ' : ' + uint16(app_key['netIndex']))
-    
-    if len(app_key_list) == 0:
-        print('     No Application Keys')
-    
-    print()
 
 def print_prov_result():
     global prov_result
@@ -472,98 +451,6 @@ def provision():
     
     print_prov_result()
 
-def app_key_menu():
-    global app_key_list
-    global subnet_list
-    global sem
-
-    choices = ['Add Application Key', 'Generate Application Key', 'Delete Application Key',
-            'Get Application Keys']
-    print('APPLICATION KEY CONFIGURATION MENU')
-    choice = get_choice(choices)
-
-    if choice == 0:
-        net_idx = subnets.get_choice(sem, publish)
-        if net_idx == None:
-            return
-
-        app_key = input('\nEnter 128-bit application key in hexadecimal format: ')
-        app_idx = int(input('Enter unsigned 16-bit application index for the application key: '), 0)
-        app_key_add = {
-                'id': 'randomId',
-                'type': 'operation',
-                'operation': {
-                    'type': 'app_key_add',
-                    'appKey': app_key,
-                    'appIndex': app_idx,
-                    'netIndex': net_idx
-                    }
-                }
-        print('Adding application key...')
-        publish(app_key_add)
-        if not sem.acquire():
-            return
-        print_app_keys()
-
-    elif choice == 1:
-        net_idx = subnets.get_choice(sem, publish)
-        if net_idx == None:
-            return
-
-        app_idx = int(input('\nEnter unsigned 16-bit application index for the application key: '), 0)
-        app_key_gen = {
-                'id': 'randomId',
-                'type': 'operation',
-                'operation': {
-                    'type': 'app_key_generate',
-                    'appIndex': app_idx,
-                    'netIndex': net_idx
-                    }
-                }
-        print('Generating application key...')
-        publish(app_key_gen)
-        if not sem.acquire():
-            return
-        print_app_keys()
-
-    elif choice == 2:
-        publish(APP_KEY_REQ)
-        if not sem.acquire():
-            return
-
-        choices = []
-        for app_key in app_key_list:
-            choices.append(uint16(app_key['appIndex']))
-
-        if len(choices) == 0:
-            print('No application keys to delete')
-            return
-
-        print('Which application key would you like to delete?')
-        choice = get_choice(choices)
-        app_idx = int(choices[choice], 0)
-        
-        app_key_del = {
-                'id': 'randomId',
-                'type': 'operation',
-                'operation': {
-                    'type': 'app_key_delete',
-                    'appIndex': app_idx
-                    }
-                }
-        print('Deleting application key...')
-        publish(app_key_del)
-        if not sem.acquire():
-            return
-        print_app_keys()
-
-    elif choice == 3:
-        print('Getting application keys...')
-        publish(APP_KEY_REQ)
-        if not sem.acquire():
-            return
-        print_app_keys()
-
 def node_request():
     print('Getting network nodes from gateway...')
     publish(NODE_REQ)
@@ -608,8 +495,6 @@ def get_state_choice():
         return False
 
 def node_configure():
-    global subnet_list
-    global app_key_list
     global node_list
     global node
     global sem
@@ -700,7 +585,7 @@ def node_configure():
 
     elif choice == 5:
         # Add Subnet
-        net_idx = subnets.get_choice(sem, publish)
+        net_idx = subnets.get_choice(sem)
         if net_idx == None:
             return
         op = {
@@ -732,24 +617,9 @@ def node_configure():
 
     elif choice == 7:
         # Bind Application Key
-        print('Acquiring application keys from gateway...')
-        publish(APP_KEY_REQ)
-        if not sem.acquire():
+        app_idx = app_keys.get_choice(sem)
+        if app_idx is None:
             return
-        print('Acquiring elements and models from node...')
-        publish(build_node_disc_json(address))
-        if not sem.acquire():
-            return
-
-        choices = []
-        for app_key in app_key_list:
-            choices.append(uint16(app_key['appIndex']))
-        if len(choices) == 0:
-            print('No application keys on the gateway to bind to model')
-            return
-        print('Which application key would you like to bind to the model?')
-        choice = get_choice(choices)
-        app_idx = int(choices[choice], 0)
 
         choices = []
         for element in node['elements']:
@@ -828,10 +698,8 @@ def node_configure():
 
     elif choice == 9:
         # Set Publish Parameters
-        print('Acquiring application keys from gateway...')
-        publish(APP_KEY_REQ)
-        if not sem.acquire():
-            return
+        app_idx = app_keys.get_choice(sem)
+
         print('Acquiring elements, models and application keys from node...')
         publish(build_node_disc_json(address))
         if not sem.acquire():
@@ -856,16 +724,6 @@ def node_configure():
         print('Which model would you like to set the publish parameters for?')
         model = get_choice(choices)
         model_id = int(choices[model][:6], 0)
-        
-        choices = []
-        for app_key in app_key_list:
-            choices.append(uint16(app_key['appIndex']))
-        if len(choices) == 0:
-            print('No application keys on the gateway to set as publish parameter for this model')
-            return
-        print('Which application key would you like this model to publish with?')
-        choice = get_choice(choices)
-        app_idx = int(choices[choice], 0)
         
 
         pub_addr = int(input('Enter unsigned 16-bit address for this model to publish to: '), 0)
@@ -1315,28 +1173,13 @@ def send_msg():
                 payload_str = payload_str[2:]
             break
 
-    subnet = s
-    if not net_idx:
-        returnubnets.get_choice(sem, publish)
-    if not subnet:
+    net_idx = subnets.get_choice(sem)
+    if net_idx is None:
         return
 
-    print('\nAcquiring application keys...')
-    publish(APP_KEY_REQ)
-    if not sem.acquire():
+    app_idx = app_keys.get_choice(sem)
+    if app_idx is None:
         return
-
-    choices = []
-    for app_key in app_key_list:
-        if app_key['netIndex'] == subnet:
-            choices.append(uint16(app_key['appIndex']))
-
-    if len(choices) == 0:
-        print('No application keys to choose from. Add some to the gateway and then to models first\n')
-        return
-
-    print('Which application key would you like to use for the mesage?')
-    app_idx = int(choices[get_choice(choices)], 0)
 
     while True:
         address = input('\nEnter destination address of the message: ')
@@ -1355,7 +1198,7 @@ def send_msg():
             'type': 'operation',
             'operation': {
                 'type': 'send_model_message',
-                'netIndex': subnet,
+                'netIndex': net_idx,
                 'appIndex': app_idx,
                 'address': address,
                 'opcode': opcode,
@@ -1376,12 +1219,6 @@ def prov_result_evt(event):
 def reset_result_evt(event):
     print('TODO: Must write logic for reset result events')
     return
-
-def app_key_list_evt(event):
-    global app_key_list
-
-    app_key_list = event['appKeyList'].copy()
-    sem.release()
 
 def node_list_evt(event):
     global node_list
@@ -1573,7 +1410,7 @@ def on_message(_client, _userdata, msg):
     elif event['type'] == 'app_key_list':
         if verbose:
             print('Recieved app key list event')
-        app_key_list_evt(event)
+        app_keys.evt(event, sem)
 
     elif event['type'] == 'node_list':
         if verbose:
@@ -1697,9 +1534,9 @@ def main_menu():
         elif menu_options[choice] == 'Provision device':
             provision()
         elif menu_options[choice] == 'Configure network subnets':
-            subnets.menu(sem, publish)
+            subnets.menu(sem)
         elif menu_options[choice] == 'Configure network application keys':
-            app_key_menu()
+            app_keys.menu(sem, subnets)
         elif menu_options[choice] == 'View network nodes':
             node_request()
         elif menu_options[choice] == 'Discover a network node':
@@ -1715,7 +1552,8 @@ def main_menu():
 
 sem = sync_sem.Sem()
 beacons = mesh_beacons.Beacons()
-subnets = mesh_subnets.Subnets(get_choice)
+subnets = mesh_subnets.Subnets(get_choice, publish)
+app_keys = mesh_app_keys.App_Keys(get_choice, publish)
 
 print('nRF Cloud Bluetooth Mesh Gateway Interface')
 api_key = input("Enter your nRF Cloud API key: ")

@@ -1,4 +1,4 @@
-''' Bluetooth mesh subnet modue '''
+''' Bluetooth mesh subnet module '''
 from byte_codec import uint16
 
 class Subnets():
@@ -18,8 +18,9 @@ class Subnets():
             }
     __subnets = [dict]
 
-    def __init__(self, get_choice):
+    def __init__(self, get_choice, publish):
         self.__get_choice = get_choice
+        self.__publish = publish
 
     def __print(self):
         ''' Print the list of current subnets '''
@@ -30,10 +31,10 @@ class Subnets():
             print('    No Subnets')
         print()
 
-    def get_choice(self, sem, publish):
+    def get_choice(self, sem):
         ''' Get a subnet selection from the user '''
         print('Acquiring subnets from gateway...')
-        publish(self.__SUBNET_REQ)
+        self.__publish(self.__SUBNET_REQ)
         if not sem.acquire():
             return None
         choices = []
@@ -50,7 +51,7 @@ class Subnets():
         self.__subnets = event['subnetList'].copy()
         sem.release()
 
-    def menu(self, sem, publish):
+    def menu(self, sem):
         ''' Run subnet menu for user '''
         print('SUBNET CONFIGURATION MENU')
         choice = self.__get_choice(self.__MENU_CHOICES)
@@ -68,7 +69,7 @@ class Subnets():
                         }
                     }
             print('Adding subnet...')
-            publish(subnet_add)
+            self.__publish(subnet_add)
             if not sem.acquire():
                 return
             self.__print()
@@ -84,13 +85,13 @@ class Subnets():
                         }
                     }
             print('Generating subnet...')
-            publish(subnet_gen)
+            self.__publish(subnet_gen)
             if not sem.acquire():
                 return
             self.__print()
 
         elif self.__MENU_CHOICES[choice] == 'Delete Subnet':
-            publish(self.__SUBNET_REQ)
+            self.__publish(self.__SUBNET_REQ)
             if not sem.acquire():
                 return
 
@@ -115,14 +116,14 @@ class Subnets():
                         }
                     }
             print('Deleteing subnet...')
-            publish(subnet_del)
+            self.__publish(subnet_del)
             if not sem.acquire():
                 return
             self.__print()
 
         elif self.__MENU_CHOICES[choice] == 'Get Subnets':
             print('Getting subnets...')
-            publish(self.__SUBNET_REQ)
+            self.__publish(self.__SUBNET_REQ)
             if not sem.acquire():
                 return
             self.__print()
