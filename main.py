@@ -6,29 +6,17 @@ import threading
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
 
+import sync_sem
+import mesh_beacons
+import mesh_subnets
+from byte_codec import uint8
+from byte_codec import uint16
+
 ACC_URL = 'https://api.nrfcloud.com/v1/account'
 DEV_URL = 'https://api.nrfcloud.com/v1/devices'
 AUTH_BEARER_PREFIX = 'Bearer '
-HEADER = 'Authorization:"Bearer c7ce5856b2aad5d16e12b48c41a80aed3303da9b'
 PORT                = 8883
 KEEP_ALIVE          = 30
-SEM_TIMEOUT         = 30
-
-BEACON_REQ = {
-        'id': 'randomId',
-        'type': 'operation',
-        'operation': {
-            'type': 'beacon_request'
-            }
-        }
-
-SUBNET_REQ = {
-        'id': 'randomId',
-        'type': 'operation',
-        'operation': {
-            'type' : 'subnet_request'
-            }
-        }
 
 APP_KEY_REQ = {
         'id': 'randomId',
@@ -46,66 +34,203 @@ NODE_REQ = {
             }
         }
 
+MODEL_ID_PARSE = {
+        0x0000: 'Configuration Server',
+        0x0001: 'Configuration Client',
+        0x0002: 'Health Server',
+        0x0003: 'Health Client',
+        0x1000: 'Generic OnOff Server',
+        0x1001: 'Generic OnOff Client',
+        0x1002: 'Generic Level Server',
+        0x1003: 'Generic Level Client',
+        0x1004: 'Generic Default Transition Time Server',
+        0x1005: 'Generic Default Transition Time Client',
+        0x1006: 'Generic Power OnOff Server',
+        0x1007: 'Generic Power OnOff Setup Server',
+        0x1008: 'Generic Power OnOff Client',
+        0x1009: 'Generic Power Level Server',
+        0x100A: 'Generic Power Level Setup Server',
+        0x100B: 'Generic Power Level Client',
+        0x100C: 'Genreic Battery Service',
+        0x100D: 'Generic Location Server',
+        0x100E: 'Generic Location Server',
+        0x100F: 'Generic Location Setup Server',
+        0x1010: 'Generic Locatino Client',
+        0x1011: 'Generic Admin Property Server',
+        0x1012: 'Generic Manufacturer Property Server',
+        0x1013: 'Generic User Property Server',
+        0x1014: 'Generic Client Property Server',
+        0x1015: 'Generic Property Client Server',
+        0x1100: 'Sensor Sensor',
+        0x1101: 'Sensor Setup Server',
+        0x1102: 'Sensor Client',
+        0x1200: 'Time Server',
+        0x1201: 'Time Setup Server',
+        0x1202: 'Time Client',
+        0x1203: 'Scene Server',
+        0x1204: 'Scene Setup Server',
+        0x1205: 'Scene Client',
+        0x1206: 'Scheduler Server',
+        0x1207: 'Scheduler Setup Server',
+        0x1208: 'Scheduler Client',
+        0x1300: 'Light Lightness Server',
+        0x1301: 'Light Lightness Setup Server',
+        0x1302: 'Light Lightness Client',
+        0x1303: 'Light CTL Server',
+        0x1304: 'Light CTL Setup Server',
+        0x1305: 'Light CTL Client',
+        0x1307: 'Light HSL Server',
+        0x1308: 'Light HSL Setup Server',
+        0x1309: 'Light HSL Client',
+        0x130A: 'Light HSL Hue Server',
+        0x130B: 'Light HSL Saturation Server',
+        0x130C: 'Light xyL Server',
+        0x130D: 'Light xyL Setup Server',
+        0x130E: 'Light xyL Client',
+        0x130F: 'Light LC Server',
+        0x1310: 'Light LC Setup Server',
+        0x1311: 'Light LC Client'
+        }
+
+SERVER_MODEL_MSGS = {
+        'Generic OnOff': [
+            'Generic OnOff Get',
+            'Generic OnOff Set',
+            'Generic OnOff Set Unacknowledged',
+            ],
+        'Generic Level': [
+            'Generic Level Get',
+            'Generic Level Set',
+            'Generic Level Set Unacknowledged',
+            'Generic Delta Set',
+            'Generic Delta Set Unacknowledged',
+            'Generic Move Set',
+            'Generic Mode Set Unacknowledged'
+            ],
+        'Generic Default Transition Time': [
+            'Generic Default Transition Time Get',
+            'Generic Default Transition Time Set',
+            'Generic Default Transition Time Set Unacknowledged',
+            ],
+        'Generic Power OnOff': [
+            'Generic OnPowerUp Get',
+            ],
+        'Generic Power OnOff Setup': [
+            'Generic OnPowerUp Set',
+            'Generic OnPowerUp Set Unacknowledged'
+            ],
+        'Generic Power Level': [
+            'Generic Power Level Get',
+            'Generic Power Level Set',
+            'Generic Power Level Set Unacknowledged',
+            'Generic Power Last Get',
+            'Generic Power Default Get',
+            'Generic Power Range Get',
+            ],
+        'Generic Power Level Setup': [
+            'Generic Power Default Set',
+            'Generic Power Default Set Unacknowledged',
+            'Generic Power Range Set',
+            'Generic Power Range Set Unacknowledged'
+            ],
+        'Generic Battery': [
+            'Generic Battery Get',
+            ],
+        'Generic Location': [
+            'Generic Location Global Get',
+            'Generic Location Local Get',
+            ],
+        'Generic Location Setup': [
+            'Generic Location Global Set',
+            'Generic Location Global Set Unacknowledged',
+            'Generic Location Local Set',
+            ],
+        'Generic Manufacturer Property': [
+            'Generic Manufacturer Properties Get',
+            'Generic Manufacturer Property Get',
+            'Generic Manufacturer Property Set',
+            'Generic Manufacturer Property Set Unacknowledged',
+            ],
+        'Generic Admin Property': [
+            'Generic Admin Properties Get',
+            'Generic Admin Property Get',
+            'Generic Admin Property Set',
+            'Generic Admin Property Set Unacknowledged',
+            ],
+        'Generic User Property': [
+            'Generic User Properties Get',
+            'Generic User Property Get',
+            'Generic User Property Set',
+            'Generic User Property Set Unacknowledged',
+            ],
+        'Generic Client Property': [
+            'Generic Client Properties Get',
+            ]
+        }
+
+MODEL_MSG_OPCODES = {
+        'Generic OnOff Get': 0x8201,
+        'Generic OnOff Set': 0x8202,
+        'Generic OnOff Set Unacknowledged': 0x8203,
+        'Generic OnOff Status': 0x8204,
+        'Generic Level Get': 0x8205,
+        'Generic Level Set': 0x8206,
+        'Generic Level Set Unacknowledged': 0x8207,
+        'Generic Delta Set': 0x8209,
+        'Generic Delta Set Unacknowledged': 0x820A,
+        'Generic Move Set': 0x820B,
+        'Generic Mode Set Unacknowledged': 0x820C,
+        'Generic Default Transition Time Get': 0x820D,
+        'Generic Default Transition Time Set': 0x820E,
+        'Generic Default Transition Time Set Unacknowledged': 0x820F,
+        'Generic OnPowerUp Get': 0x8211,
+        'Generic OnPowerUp Set': 0x8213,
+        'Generic OnPowerUp Set Unacknowledged': 0x8214,
+        'Generic Power Level Get': 0x8215,
+        'Generic Power Level Set': 0x8216,
+        'Generic Power Level Set Unacknowledged': 0x8217,
+        'Generic Power Last Get': 0x8219,
+        'Generic Power Default Get': 0x821B,
+        'Generic Power Range Get': 0x821D,
+        'Generic Power Default Set': 0x821F,
+        'Generic Power Default Set Unacknowledged': 0x8220,
+        'Generic Power Range Set': 0x8221,
+        'Generic Power Range Set Unacknowledged': 0x8222,
+        'Generic Battery Get': 0x8223,
+        'Generic Location Global Get': 0x8225,
+        'Generic Location Local Get': 0x8226,
+        'Generic Location Global Set': 0x41,
+        'Generic Location Global Set Unacknowledged': 0x42,
+        'Generic Location Local Set': 0x8228,
+        'Generic Manufacturer Properties Get': 0x822A,
+        'Generic Manufacturer Property Get': 0x822B,
+        'Generic Manufacturer Property Set': 0x44,
+        'Generic Manufacturer Property Set Unacknowledged': 0x45,
+        'Generic Admin Properties Get': 0x822C,
+        'Generic Admin Property Get': 0x822D,
+        'Generic Admin Property Set': 0x48,
+        'Generic Admin Property Set Unacknowledged': 0x49,
+        'Generic User Properties Get': 0x822E,
+        'Generic User Property Get': 0x822F,
+        'Generic User Property Set': 0x4C,
+        'Generic User Property Set Unacknowledged': 0x4D,
+        'Generic Client Properties Get': 0x4F,
+        }
+
+
 verbose = False
-beacon_list = []
-subnet_list = []
 app_key_list = []
 node_list = []
 node = {}
 prov_result = {}
 subsciption_list = {}
 live = True
-sem = threading.BoundedSemaphore(1)
+getting_input = False
+tid = 0
 
-def sem_acquire():
-    global sem
-
-    if not sem.acquire(blocking=True, timeout=SEM_TIMEOUT):
-        print('\n*** Operation timed out ***\n')
-        return False
-
-    return True
-
-def sem_release():
-    global sem
-
-    try:
-        sem.release()
-    except ValueError:
-        pass
 
 def publish(msg):
     client.publish(c2g_topic, payload=json.dumps(msg), qos=0, retain=False)
-
-def uint8(number):
-    return '0x{:02x}'.format(number)
-
-def uint16(number):
-    return '0x{:04x}'.format(number)
-
-def print_beacon_list():
-    global beacon_list
-
-    for beacon in beacon_list:
-        print('    Device Type: ' + beacon['deviceType'])
-        print('    UUID       : ' + beacon['uuid'])
-        print('    OOB Info   : ' + beacon['oobInfo'])
-        print('    URI Hash   : ' + str(beacon['uriHash']) + '\n')
-
-    if len(beacon_list) == 0:
-        print('    No Beacons\n')
-
-def print_subnets():
-    global subnet_list
-
-    print('Subnets:')
-    for subnet in subnet_list:
-        print('  - ' + uint16(subnet['netIndex']))
-    
-    if len(subnet_list) == 0:
-        print('    No Subnets')
-    
-    print()
 
 def print_app_keys():
     global app_key_list
@@ -148,11 +273,12 @@ def print_nodes():
         print('    UUID         : ' + node['uuid'])
         print('    Network Index: ' + uint16(node['netIndex']))
         print('    Element Count: ' + str(node['elementCount']))
+        print()
         
     if len(node_list) == 0:
         print('    No Nodes')
+        print()
 
-    print()
 
 def print_node():
     global node
@@ -226,7 +352,7 @@ def print_node():
         print('        LOC    : ' + uint16(element['address']) + '\n')
 
         for model in element['sigModels']:
-            print('        SIG Model ' + uint16(model['modelId']))
+            print('        SIG Model ' + uint16(model['modelId']) + ' - ' + MODEL_ID_PARSE[model['modelId']])
             print('            Application Keys:')
             if len(model['appKeyIndexes']) == 0:
                 print('              None')
@@ -304,50 +430,12 @@ def build_node_disc_json(address):
 
     return node_disc
 
-def get_choice(options):
-    global live
-
-    while True:
-        for idx, option in enumerate(options):
-            print(str(idx) + '. ' + option)
-
-        choice = input('\n>')
-
-        if choice.lower() == 'exit' or choice.lower() == 'quit':
-            live = False
-            return
-
-        if choice.lower() == 'back' or choice.lower() == 'return':
-            return len(options) + 1
-
-        try:
-            choice = int(choice)
-        except ValueError:
-            print('Invalid choice. You must enter a number between 0 and ' + str(len(options) - 1))
-            continue
-
-        if choice < 0 or choice > (len(options) - 1):
-            print('Invalid choice. You must enter a number between 0 and ' + str(len(options) - 1))
-            continue
-
-        return choice
-
-def beacon_request():
-    ''' Request a list of unprovisioned beacons from the gateway '''
-    
-    print("Acquiring unprovisioned device beacons from gateway...\n")
-    publish(BEACON_REQ)
-    if not sem_acquire():
-        return
-    
-    print_beacon_list()
-
 def provision():
     global beacon_list
 
     print("Getting unprovisioned device beacons from gateway...\n")
     publish(BEACON_REQ)
-    if not sem_acquire():
+    if not sem.acquire():
         return
 
     if len(beacon_list) == 0:
@@ -379,93 +467,15 @@ def provision():
                 }
             }
     publish(prov)
-    if not sem_acquire():
+    if not sem.acquire():
         return
     
     print_prov_result()
 
-def subnet_menu():
-    global subnet_list
-
-    choices = ['Add Subnet', 'Generate Subnet', 'Delete Subnet', 'Get Subnets']
-    print('SUBNET CONFIGURATION MENU')
-    choice = get_choice(choices)
-
-    if choice == 0:
-        net_key = input('Enter 128-bit network key in hexadecimal format: ')
-        net_idx = int(input('Enter unsigned 16-bit network index: '), 0)
-        subnet_add = {
-                'id': 'randomId',
-                'type': 'operation',
-                'operation': {
-                    'type': 'subnet_add',
-                    'netKey': net_key,
-                    'netIndex': net_idx
-                    }
-                }
-        print('Adding subnet...')
-        publish(subnet_add)
-        if not sem_acquire():
-            return
-        print_subnets()
-
-    elif choice == 1:
-        net_idx = int(input('Enter unsigned 16-bit network index: '), 0)
-        subnet_gen = {
-                'id': 'randomId',
-                'type': 'operation',
-                'operation': {
-                    'type': 'subnet_generate',
-                    'netIndex': net_idx
-                    }
-                }
-        print('Generating subnet...')
-        publish(subnet_gen)
-        if not sem_acquire():
-            return
-        print_subnets()
-        
-    elif choice == 2:
-        publish(SUBNET_REQ)
-        if not sem_acquire():
-            return
-        
-        choices = []
-        for subnet in subnet_list:
-            if subnet['netIndex'] != 0:
-                choices.append(uint16(subnet['netIndex']))
-
-        if len(choices) == 0:
-            print('No subnets to delete')
-            return
-
-        print('Which subnet would you like to delete?')
-        choice = get_choice(choices)
-        
-        subnet_del = {
-                'id': 'randomId',
-                'type': 'operation',
-                'operation': {
-                    'type': 'subnet_delete',
-                    'netIndex': int(choices[choice], 0)
-                    }
-                }
-        print('Deleteing subnet...')
-        publish(subnet_del)
-        if not sem_acquire():
-            return
-        print_subnets()
-
-    elif choice == 3:
-        print('Getting subnets...')
-        publish(SUBNET_REQ)
-        if not sem_acquire():
-            return
-        print_subnets()
-
 def app_key_menu():
     global app_key_list
     global subnet_list
+    global sem
 
     choices = ['Add Application Key', 'Generate Application Key', 'Delete Application Key',
             'Get Application Keys']
@@ -473,19 +483,11 @@ def app_key_menu():
     choice = get_choice(choices)
 
     if choice == 0:
-        publish(SUBNET_REQ)
-        if not sem_acquire():
+        net_idx = subnets.get_choice(sem, publish)
+        if net_idx == None:
             return
 
-        choices = []
-        for subnet in subnet_list:
-            choices.append(uint16(subnet['netIndex']))
-
-        print('Which subnet will the new application key part be a part of?')
-        choice = get_choice(choices)
-        net_idx = int(choices[choice], 0)
-
-        app_key = input('Enter 128-bit application key in hexadecimal format: ')
+        app_key = input('\nEnter 128-bit application key in hexadecimal format: ')
         app_idx = int(input('Enter unsigned 16-bit application index for the application key: '), 0)
         app_key_add = {
                 'id': 'randomId',
@@ -499,24 +501,16 @@ def app_key_menu():
                 }
         print('Adding application key...')
         publish(app_key_add)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print_app_keys()
 
     elif choice == 1:
-        publish(SUBNET_REQ)
-        if not sem_acquire():
+        net_idx = subnets.get_choice(sem, publish)
+        if net_idx == None:
             return
 
-        choices = []
-        for subnet in subnet_list:
-            choices.append(uint16(subnet['netIndex']))
-
-        print('Which subnet will the generated application key be a part of?')
-        choice = get_choice(choices)
-        net_idx = int(choices[choice], 0)
-
-        app_idx = int(input('Enter unsigned 16-bit application index for the application key: '), 0)
+        app_idx = int(input('\nEnter unsigned 16-bit application index for the application key: '), 0)
         app_key_gen = {
                 'id': 'randomId',
                 'type': 'operation',
@@ -528,18 +522,22 @@ def app_key_menu():
                 }
         print('Generating application key...')
         publish(app_key_gen)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print_app_keys()
 
     elif choice == 2:
         publish(APP_KEY_REQ)
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
         for app_key in app_key_list:
             choices.append(uint16(app_key['appIndex']))
+
+        if len(choices) == 0:
+            print('No application keys to delete')
+            return
 
         print('Which application key would you like to delete?')
         choice = get_choice(choices)
@@ -555,22 +553,21 @@ def app_key_menu():
                 }
         print('Deleting application key...')
         publish(app_key_del)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print_app_keys()
 
     elif choice == 3:
         print('Getting application keys...')
         publish(APP_KEY_REQ)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print_app_keys()
 
 def node_request():
-
     print('Getting network nodes from gateway...')
     publish(NODE_REQ)
-    if not sem_acquire():
+    if not sem.acquire():
         return
     print_nodes()
 
@@ -580,7 +577,7 @@ def node_discover():
 
     print('Acquiring nodes from gateway...\n')
     publish(NODE_REQ)
-    if not sem_acquire():
+    if not sem.acquire():
         return
 
     choices = []
@@ -597,7 +594,7 @@ def node_discover():
 
     print('Discovering node. This may take a few minutes...')
     publish(build_node_disc_json(int(choices[choice], 0)))
-    if not sem_acquire():
+    if not sem.acquire():
         return
     print_node()
 
@@ -615,10 +612,11 @@ def node_configure():
     global app_key_list
     global node_list
     global node
+    global sem
 
     print('Acquiring nodes from gateway...')
     publish(NODE_REQ)
-    if not sem_acquire():
+    if not sem.acquire():
         return
 
     choices = []
@@ -702,16 +700,9 @@ def node_configure():
 
     elif choice == 5:
         # Add Subnet
-        print('Acquiring subnets from gateway...')
-        publish(SUBNET_REQ)
-        if not sem_acquire():
+        net_idx = subnets.get_choice(sem, publish)
+        if net_idx == None:
             return
-        choices = []
-        for subnet in subnet_list:
-            choices.append(uint16(subnet['netIndex']))
-        print('Which subnet would you like to add to the node?')
-        choice = get_choice(choices)
-        net_idx = int(choices[choice], 0)
         op = {
                 'type': 'node_configure',
                 'configuration': 'subnetAdd',
@@ -723,7 +714,7 @@ def node_configure():
         # Delete Subnet
         print('Acquiring subnets from node...')
         publish(build_node_disc_json(address))
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -743,11 +734,11 @@ def node_configure():
         # Bind Application Key
         print('Acquiring application keys from gateway...')
         publish(APP_KEY_REQ)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print('Acquiring elements and models from node...')
         publish(build_node_disc_json(address))
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -772,13 +763,13 @@ def node_configure():
 
         choices = []
         for model in node['elements'][choice]['sigModels']:
-            choices.append(uint16(model['modelId']))
+            choices.append(uint16(model['modelId']) + ' - ' + MODEL_ID_PARSE[model['modelId']])
         if len(choices) == 0:
             print('No models in element to bind application keys to')
             return
         print('Which model would you like to bind an application key to?')
         choice = get_choice(choices)
-        model_id = int(choices[choice], 0)
+        model_id = int(choices[choice][:6], 0)
 
         op = {
                 'type': 'node_configure',
@@ -793,7 +784,7 @@ def node_configure():
         # Unbind Application Key
         print('Acquiring elements, models and application keys from node...')
         publish(build_node_disc_json(address))
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -808,7 +799,7 @@ def node_configure():
 
         choices = []
         for model in node['elements'][element]['sigModels']:
-            choices.append(uint16(model['modelId']))
+            choices.append(uint16(model['modelId']) + ' - ' + MODEL_ID_PARSE[model['modelId']])
         if len(choices) == 0:
             print('No models in element to unbind an application key from')
             return;
@@ -839,11 +830,11 @@ def node_configure():
         # Set Publish Parameters
         print('Acquiring application keys from gateway...')
         publish(APP_KEY_REQ)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print('Acquiring elements, models and application keys from node...')
         publish(build_node_disc_json(address))
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -858,13 +849,13 @@ def node_configure():
 
         choices = []
         for model in node['elements'][element]['sigModels']:
-            choices.append(uint16(model['modelId']))
+            choices.append(uint16(model['modelId']) + ' - ' + MODEL_ID_PARSE[model['modelId']])
         if len(choices) == 0:
             print('No models in element to set publish parameters for')
             return;
         print('Which model would you like to set the publish parameters for?')
         model = get_choice(choices)
-        model_id = int(choices[model], 0)
+        model_id = int(choices[model][:6], 0)
         
         choices = []
         for app_key in app_key_list:
@@ -914,7 +905,7 @@ def node_configure():
         # Add Subscribe Address
         print('Acquiring elements, models and application keys from node...')
         publish(build_node_disc_json(address))
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -929,13 +920,13 @@ def node_configure():
 
         choices = []
         for model in node['elements'][element]['sigModels']:
-            choices.append(uint16(model['modelId']))
+            choices.append(uint16(model['modelId']) + ' - ' + MODEL_ID_PARSE[model['modelId']])
         if len(choices) == 0:
             print('No models in element to add subscribe addresses to')
             return;
         print('Which model would you like to add a subscribe address to?')
         model = get_choice(choices)
-        model_id = int(choices[model], 0)
+        model_id = int(choices[model][:6], 0)
 
         sub_addr = int(input('Enter unsigned 16-bit subscribe address to add to this model: '), 0)
 
@@ -952,7 +943,7 @@ def node_configure():
         # Delete Subscribe Address
         print('Acquiring elements, models and application keys from node...')
         publish(build_node_disc_json(address))
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -967,7 +958,7 @@ def node_configure():
 
         choices = []
         for model in node['elements'][element]['sigModels']:
-            choices.append(uint16(model['modelId']))
+            choices.append(uint16(model['modelId']) + ' - ' + MODEL_ID_PARSE[model['modelId']])
         if len(choices) == 0:
             print('No models in element to delete subscribe addresses from')
             return;
@@ -997,7 +988,7 @@ def node_configure():
         # Overwrite Subscribe Addresses
         print('Acquiring elements, models and application keys from node...')
         publish(build_node_disc_json(address))
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -1012,7 +1003,7 @@ def node_configure():
 
         choices = []
         for model in node['elements'][element]['sigModels']:
-            choices.append(uint16(model['modelId']))
+            choices.append(uint16(model['modelId']) + ' - ' + MODEL_ID_PARSE[model['modelId']])
         if len(choices) == 0:
             print('No models in element to overwrite subscribe addresses for')
             return;
@@ -1038,7 +1029,7 @@ def node_configure():
             }
     print('Sending configuration request to gateway. This may take serveral minutes...\n')
     publish(configure)
-    if not sem_acquire():
+    if not sem.acquire():
         return
     print_node()
 
@@ -1074,7 +1065,7 @@ def subscribe_menu():
                 }
         print('Subscribing...')
         publish(subscribe)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print_subscription_list()
 
@@ -1089,7 +1080,7 @@ def subscribe_menu():
                 }
         print('Acquiring subscription list...')
         publish(subscribe_list_req)
-        if not sem_acquire():
+        if not sem.acquire():
             return
 
         choices = []
@@ -1112,7 +1103,7 @@ def subscribe_menu():
                 }
         print('Unsubscribing...')
         publish(unsubscribe)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print_subscription_list()
 
@@ -1127,51 +1118,251 @@ def subscribe_menu():
                 }
         print('Acquiring subscription list...')
         publish(subscribe_list_req)
-        if not sem_acquire():
+        if not sem.acquire():
             return
         print_subscription_list()
 
-def main_menu():
-    global live
+def get_tid():
+    while True:
+        try:
+            tid = int(input('Enter the transaction identifier: '), 0)
+        except ValueError:
+            print('Invalid transaction identifier. Must be a number between 0 and 254')
+            continue
+        if tid < 0 or tid > 254:
+            print('Invalid transaction identifier. Must be a number between 0 and 254')
+            continue
+        return tid
+
+def get_transition_time():
+    while True:
+        tt = input('Enter the transition time (leave blank to skip): ')
+        if not tt:
+            return None
+        try:
+            tt = int(tt, 0)
+        except ValueError:
+            print('Invalid transition time. Must be a number between 0 and 254')
+            continue
+        if tt < 0 or tt > 254:
+            print('Invalid transition time. Must be a number between 0 and 254')
+            continue
+        return tt
+
+def get_delay():
+    while True:
+        delay = input('Enter the delay (leave blank to skip): ')
+        if not delay:
+            return None
+        try:
+            delay = int(delay, 0)
+        except ValueError:
+            print('Invalid delay. Must be a number between 0 and 254')
+            continue
+        if delay < 0 or delay > 254:
+            print('Invalid delay. Must be a number between 0 and 254')
+            continue
+        return delay
+
+def get_payload(msg):
+    global tid
+
+    payload = []
+    if msg == 'Generic OnOff Get':
+        return payload
+    elif msg == 'Generic OnOff Set' or msg == 'Generic OnOff Set Unacknowledged':
+        choices = ['ON', 'OFF']
+        print('Do you want to turn the model ON or OFF?')
+        on_off = choices[get_choice(choices)]
+        if on_off == 'ON':
+            payload.append({'byte': 0x01})
+        elif on_off == 'OFF':
+            payload.append({'byte': 0x00})
+        payload.append({'byte': tid})
+        tid = tid + 1
+        tt = get_transition_time()
+        if tt:
+            payload.append({'byte': tt})
+        delay = get_delay()
+        if delay:
+            payload.append({'byte': delay})
+        return payload
+    else:
+        print('NOT YET SUPPORTED')
+        return
+        #'Generic Level Get': 0x8205
+        #'Generic Level Set': 0x8206
+        #'Generic Level Set Unacknowledged': 0x8207
+        #'Generic Level Status': 0x8208
+        #'Generic Delta Set': 0x8209
+        #'Generic Delta Set Unacknowledged': 0x820A
+        #'Generic Move Set': 0x820B
+        #'Generic Mode Set Unacknowledged': 0x820C
+        #'Generic Default Transition Time Get': 0x820D
+        #'Generic Default Transition Time Set': 0x820E
+        #'Generic Default Transition Time Set Unacknowledged': 0x820F
+        #'Generic Default Transition Time Status': 0x8210
+        #'Generic OnPowerUp Get': 0x8211
+        #'Generic OnPowerUp Status': 0x8212
+        #'Generic OnPowerUp Set': 0x8213
+        #'Generic OnPowerUp Set Unacknowledged': 0x8214
+        #'Generic Power Level Get': 0x8215
+        #'Generic Power Level Set': 0x8216
+        #'Generic Power Level Set Unacknowledged': 0x8217
+        #'Generic Power Level Status': 0x8218
+        #'Generic Power Last Get': 0x8219
+        #'Generic Power Last Status': 0x821A
+        #'Generic Power Default Get': 0x821B
+        #'Generic Power Default Status': 0x821C
+        #'Generic Power Range Get': 0x821D
+        #'Generic Power Range Status': 0x821E
+        #'Generic Power Default Set': 0x821F
+        #'Generic Power Default Set Unacknowledged': 0x8220
+        #'Generic Power Range Set': 0x8221
+        #'Generic Power Range Set Unacknowledged': 0x8222
+        #'Generic Battery Get': 0x8223
+        #'Generic Battery Status': 0x8224
+        #'Generic Location Global Get': 0x8225
+        #'Generic Location Global Status': 0x40
+        #'Generic Location Local Get': 0x8226
+        #'Generic Location Local Status': 0x8227
+        #'Generic Location Global Set': 0x41
+        #'Generic Location Global Set Unacknowledged': 0x42
+        #'Generic Location Local Set': 0x8228
+        #'Generic Location Local Status': 0x8229
+        #'Generic Manufacturer Properties Get': 0x822A
+        #'Generic Manufacturer Properties Status': 0x43
+        #'Generic Manufacturer Property Get': 0x822B
+        #'Generic Manufacturer Property Set': 0x44
+        #'Generic Manufacturer Property Set Unacknowledged': 0x45
+        #'Generic Manufacturer Property Status': 0x46
+        #'Generic Admin Properties Get': 0x822C
+        #'Generic Admin Properties Status': 0x47
+        #'Generic Admin Property Get': 0x822D
+        #'Generic Admin Property Set': 0x48
+        #'Generic Admin Property Set Unacknowledged': 0x49
+        #'Generic Admin Property Status': 0x4A
+        #'Generic User Properties Get': 0x822E
+        #'Generic User Properties Status': 0x4B
+        #'Generic User Property Get': 0x822F
+        #'Generic User Property Set': 0x4C
+        #'Generic User Property Set Unacknowledged': 0x4D
+        #'Generic User Property Status': 0x4E
+        #'Generic Client Properties Get': 0x4F
+        #'Generic Client Properties Status':0x50
+
+def send_msg():
     global sem
 
-    sem.acquire()
-    while live:
-        menu_options = [
-                'View unprovisioned device beacons',
-                'Provision device',
-                'Configure network subnets',
-                'Configure network application keys',
-                'View network nodes',
-                'Discover a network node',
-                'Configure a network node',
-                'Reset a network node',
-                'Configure mesh model subscriptions'
-                ]
+    choices = ['SIG Model', 'Vendor Model']
 
-        print("MAIN MENU")
-        print("Select from the following options:")
+    print('What model type do you want to send a message to?')
+    choice = get_choice(choices)
 
-        choice = get_choice(menu_options)
+    if choice == 0:
+        # SIG Model
+        choices = [
+               'Generic OnOff',
+               'Generic Level',
+               'Generic Default Transition',
+               'Generic Power OnOff',
+               'Generic Power OnOff Setup',
+               'Generic Power Level',
+               'Generic Power Level Setup',
+               'Generic Battery',
+               'Generic Location',
+               'Generic Location Setup',
+               'Generic Manufacturer Property',
+               'Generic Admin Property',
+               'Generic User Property',
+               'Generic Client Property'
+               ]
+        
+        print('Which SIG model to you want to send a message for?')
+        model = list(SERVER_MODEL_MSGS.keys())[get_choice(SERVER_MODEL_MSGS.keys())]
+        
+        print('Which ' + model + ' message would you like to send?')
+        msg = SERVER_MODEL_MSGS[model][get_choice(SERVER_MODEL_MSGS[model])]
 
-        if choice == 0:
-            beacon_request()
-        elif choice == 1:
-            provision()
-        elif choice == 2:
-            subnet_menu()
-        elif choice == 3:
-            app_key_menu()
-        elif choice == 4:
-            node_request()
-        elif choice == 5:
-            node_discover()
-        elif choice == 6:
-            node_configure()
-        elif choice == 7:
-            reset()
-        elif choice == 8:
-            subscribe_menu()
+        opcode = MODEL_MSG_OPCODES[msg]
+
+        payload = get_payload(msg)
+
+    elif choice == 1:
+        # Vendor Model
+        while True:
+            opcode_str = input('Enter opcode as a string of hexadecimal characters: ')
+            try:
+                opcode = int(opcode_str, 16)
+            except ValueError:
+                print('Invalid opcode. Must be a hexadecimal number between 0x000000 and 0xFFFFFF')
+                continue
+            if opcode < 0 or opcode > 0xFFFFFF:
+                print('Invalid opcode. Must be a hexadecimal number between 0x000000 and 0xFFFFFF')
+                continue
+            break
+
+        while True:
+            payload_str = input('Enter message payload as a string of hexadecimal characters: ')
+            payload = []
+            while len(payload_str) > 0:
+                try:
+                    byte = int(payload_str[:2], 16)
+                except ValueError:
+                    print('Invalid byte in payload: ' + payload_str[:2] + '. Must be a hexadecimal number')
+                    continue
+                payload.append({'byte': byte})
+                payload_str = payload_str[2:]
+            break
+
+    subnet = s
+    if not net_idx:
+        returnubnets.get_choice(sem, publish)
+    if not subnet:
+        return
+
+    print('\nAcquiring application keys...')
+    publish(APP_KEY_REQ)
+    if not sem.acquire():
+        return
+
+    choices = []
+    for app_key in app_key_list:
+        if app_key['netIndex'] == subnet:
+            choices.append(uint16(app_key['appIndex']))
+
+    if len(choices) == 0:
+        print('No application keys to choose from. Add some to the gateway and then to models first\n')
+        return
+
+    print('Which application key would you like to use for the mesage?')
+    app_idx = int(choices[get_choice(choices)], 0)
+
+    while True:
+        address = input('\nEnter destination address of the message: ')
+        try:
+            address = int(address, 0)
+        except ValueError:
+            print('Invalid destination address/ Must be a number between 0x0000 and 0xFFFF')
+            continue
+        if address < 0 or address > 0xFFFF:
+            print('Invalid destination address/ Must be a number between 0x0000 and 0xFFFF')
+            continue
+        break
+
+    send_model_message = {
+            'id': 'randomId',
+            'type': 'operation',
+            'operation': {
+                'type': 'send_model_message',
+                'netIndex': subnet,
+                'appIndex': app_idx,
+                'address': address,
+                'opcode': opcode,
+                'payload': payload
+                }
+            }
+    publish(send_model_message)
 
 def prov_result_evt(event):
     global prov_result
@@ -1180,47 +1371,35 @@ def prov_result_evt(event):
     del event['timestamp']
     prov_result = event.copy()
 
-    sem_release()
+    sem.release()
 
 def reset_result_evt(event):
     print('TODO: Must write logic for reset result events')
     return
 
-def beacon_list_evt(event):
-    global beacon_list
-
-    beacon_list = event['beacons'].copy()
-    sem_release()
-
-def subnet_list_evt(event):
-    global subnet_list
-
-    subnet_list = event['subnetList'].copy()
-    sem_release()
-
 def app_key_list_evt(event):
     global app_key_list
 
     app_key_list = event['appKeyList'].copy()
-    sem_release()
+    sem.release()
 
 def node_list_evt(event):
     global node_list
 
     node_list = event['nodes'].copy()
-    sem_release()
+    sem.release()
 
 def node_disc_evt(event):
     global node
 
     if event['error'] != 0:
         print('Error performing node discovery: ' + str(event['error']))
-        sem_release()
+        sem.release()
         return
 
     if event['status'] != 0:
         print('Status performing node discovery: ' + str(event['status']))
-        sem_release()
+        sem.release()
         return
 
     del event['type']
@@ -1229,13 +1408,122 @@ def node_disc_evt(event):
     del event['status']
    
     node = event.copy()
-    sem_release()
+    sem.release()
 
 def subscribe_list_evt(event):
     global subscription_list
 
     subscription_list = event['address_list'].copy()
-    sem_release()
+    sem.release()
+
+def print_msg_details(event):
+        print('    Network Index: ' + uint16(event['netIndex']))
+        print('    Application Index: ' + uint16(event['appIndex']))
+        print('    Source Address: ' + uint16(event['sourceAddress']))
+        print('    Destination Address: ' + uint16(event['destinationAddress']))
+
+def recieve_model_message_evt(event):
+    global getting_input
+
+    if getting_input:
+        print('\n')
+
+    if event['opcode'] == MODEL_MSG_OPCODES['Generic OnOff Get']:
+        print('Generic OnOff Get:')
+        print_msg_details(event)
+        payload = event['payload']
+
+    elif event['opcode'] == MODEL_MSG_OPCODES['Generic OnOff Set'] or event['opcode'] == MODEL_MSG_OPCODES['Generic OnOff Set Unacknowledged']:
+        print('Generic OnOff Set:')
+        print_msg_details(event)
+        payload = event['payload']
+        if payload[0]['byte']:
+            print('    OnOff: ON')
+        else:
+            print('    OnOff: OFF')
+        print('    TID: ' + uint8(payload[1]))
+        if len(payload) > 2:
+            print('    Transition Time: ' + uint8(payload[2]))
+        if len(payload) > 3:
+            print('    Delay: ' + uint8(payload[3]))
+
+    elif event['opcode'] == MODEL_MSG_OPCODES['Generic OnOff Status']:
+        print('Generic OnOff Status:')
+        print_msg_details(event)
+        payload = event['payload']
+        if payload[0]['byte']:
+            print('    Present OnOff: ON')
+        else:
+            print('    Present OnOff: OFF')
+        if len(payload) > 1:
+            if payload[1]:
+                print('    Target OnOff: ON')
+            else:
+                print('    Target OnOff: OFF')
+        if len(payload) > 2:
+            print('    Remaining Time: ' + uint8_t(payload[2]))
+
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Level Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Level Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Level Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Delta Set']: 0x8209,
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Delta Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Move Set']: 0x820B,
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Mode Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Default Transition Time Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Default Transition Time Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Default Transition Time Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic OnPowerUp Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic OnPowerUp Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic OnPowerUp Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Level Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Level Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Level Set Unacknowledged']: 0x8217,
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Last Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Default Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Range Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Default Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Default Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Range Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Power Range Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Battery Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Location Global Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Location Local Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Location Global Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Location Global Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Location Local Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Manufacturer Properties Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Manufacturer Property Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Manufacturer Property Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Manufacturer Property Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Admin Properties Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Admin Property Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Admin Property Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Admin Property Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic User Properties Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic User Property Get']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic User Property Set']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic User Property Set Unacknowledged']:
+    #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Client Properties Get']:
+    else:
+        print('Recieved unsupported mesh model message:')
+        print_msg_details(event)
+        print('    Opcode: ' + hex(event['opcode']))
+
+    if getting_input:
+        print('\nMAIN MENU')
+        print('Select from the following options:')
+        print('0. View unprovisioned device beacons')
+        print('1. Provision device')
+        print('2. Configure network subnets')
+        print('3. Configure network application keys')
+        print('4. View network nodes')
+        print('5. Discover a network node')
+        print('6. Configure a network node')
+        print('7. Reset a network node')
+        print('8. Configure mesh model subscriptions')
+        print('9. Send mesh model message')
+        print('\n>')
 
 def on_connect(client, _userdata, _flags, r_c):
     '''On MQTT broker connect callback'''
@@ -1265,7 +1553,7 @@ def on_message(_client, _userdata, msg):
     if event['type'] == 'beacon_list':
         if verbose:
             print('Recieved beacon list event')
-        beacon_list_evt(event)
+        beacons.evt(event, sem)
 
     elif event['type'] == 'provision_result':
         if verbose:
@@ -1280,7 +1568,7 @@ def on_message(_client, _userdata, msg):
     elif event['type'] == 'subnet_list':
         if verbose:
             print('Recieved subnet list event')
-        subnet_list_evt(event)
+        subnets.evt(event, sem)
 
     elif event['type'] == 'app_key_list':
         if verbose:
@@ -1302,6 +1590,11 @@ def on_message(_client, _userdata, msg):
             print('Recieved subscribe list event')
         subscribe_list_evt(event)
 
+    elif event['type'] == 'recieve_model_message':
+        if verbose:
+            print('Recieved recieve model message event')
+        recieve_model_message_evt(event)
+
     else:
         print("ERROR: Unrecognized event: " + event['type'])
 
@@ -1313,7 +1606,7 @@ def on_subscribe(client, _userdata, _midi, granted_qos):
     print('Subscribed to ' + g2c_topic)
     print('QOS: ' + str(granted_qos) + '\n')
 
-    sem_release()
+    sem.release()
 
 def http_req(req_url, req_api_key):
     ''' Make an HTTP request '''
@@ -1338,6 +1631,91 @@ def http_req(req_url, req_api_key):
         print('GET Error: ' + str(resp.status_code))
 
     return resp.json()
+
+def get_choice(options):
+    ''' Get a choice from the user from a list of menu options '''
+    global live
+    global getting_input
+
+    getting_input = True
+    while True:
+        for idx, option in enumerate(options):
+            print(str(idx+1) + '. ' + option)
+
+        choice = input('\n>')
+
+        if choice.lower() == 'exit' or choice.lower() == 'quit':
+            live = False
+            return
+
+        if choice.lower() == 'back' or choice.lower() == 'return':
+            return len(options)
+
+        try:
+            choice = int(choice)
+        except ValueError:
+            print('Invalid choice. You must enter a number between 1 and ' + str(len(options)))
+            continue
+
+        if choice < 1 or choice > len(options):
+            print('Invalid choice. You must enter a number between 1 and ' + str(len(options)))
+            continue
+
+        getting_input = False
+        return choice-1
+
+def main_menu():
+    ''' Main menu for CLI. Runs as a thread '''
+    global sem;
+    global live;
+
+    sem.acquire()
+    while live:
+        menu_options = [
+                'View unprovisioned device beacons',
+                'Provision device',
+                'Configure network subnets',
+                'Configure network application keys',
+                'View network nodes',
+                'Discover a network node',
+                'Configure a network node',
+                'Reset a network node',
+                'Configure mesh model subscriptions',
+                'Send mesh model message'
+                ]
+
+        print("MAIN MENU")
+        print("Select from the following options:")
+
+        choice = get_choice(menu_options)
+
+        if not choice:
+            break
+
+        if menu_options[choice] == 'View unprovisioned device beacons':
+            beacons.request_beacons(sem, publish)
+        elif menu_options[choice] == 'Provision device':
+            provision()
+        elif menu_options[choice] == 'Configure network subnets':
+            subnets.menu(sem, publish)
+        elif menu_options[choice] == 'Configure network application keys':
+            app_key_menu()
+        elif menu_options[choice] == 'View network nodes':
+            node_request()
+        elif menu_options[choice] == 'Discover a network node':
+            node_discover()
+        elif menu_options[choice] == 'Configure a network node':
+            node_configure()
+        elif menu_options[choice] == 'Reset a network node':
+            reset()
+        elif menu_options[choice] == 'Configure mesh model subscriptions':
+            subscribe_menu()
+        elif menu_options[choice] == 'Send mesh model message':
+            send_msg()
+
+sem = sync_sem.Sem()
+beacons = mesh_beacons.Beacons()
+subnets = mesh_subnets.Subnets(get_choice)
 
 print('nRF Cloud Bluetooth Mesh Gateway Interface')
 api_key = input("Enter your nRF Cloud API key: ")
@@ -1380,17 +1758,20 @@ client = mqtt.Client(client_id)
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_subscribe = on_subscribe
-client.tls_set(ca_certs = './caCert.crt', certfile = './clientCert.crt',\
-        keyfile = './privateKey.key', cert_reqs=mqtt.ssl.CERT_REQUIRED,\
+client.tls_set(ca_certs = './credentials/caCert.crt', certfile = './credentials/clientCert.crt',\
+        keyfile = './credentials/privateKey.key', cert_reqs=mqtt.ssl.CERT_REQUIRED,\
         tls_version=mqtt.ssl.PROTOCOL_TLS, ciphers=None)
 client.connect(mqtt_endpoint, PORT, KEEP_ALIVE)
 
-sem.acquire(blocking=True, timeout=None)
-menu_thread = threading.Thread(target=main_menu)
-menu_thread.start()
+if not sem.acquire():
+    print('nRF Cloud connection timed out. Try again later.')
+    sys.exit()
+
+main_menu_thread = threading.Thread(target=main_menu)
+main_menu_thread.start()
 
 while live:
     client.loop()
 
-menu_thread.join()
+main_menu_thread.join()
 print("Exiting...")
