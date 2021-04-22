@@ -8,8 +8,12 @@ class Beacons():
                 'type': 'beacon_request'
                 }
             }
-
     __beacons = [dict]
+
+    def __init__(self, sem, get_choice, publish):
+        self.__sem = sem
+        self.__get_choice = get_choice
+        self.__publish = publish
 
     def __print_beacons(self):
         ''' Print the current list of beacons '''
@@ -22,17 +26,32 @@ class Beacons():
         if len(self.__beacons) == 0:
             print('    No Beacons\n')
 
-    def request_beacons(self, sem, publish):
+    def get_choice(self):
+        print('Acquiring unprovisioned device beacons from gateway...')
+        self.__publish(self.__BEACON_REQ)
+        if not self.__sem.acquire():
+            return None
+        choices = []
+        for beacon in self.__beacons:
+            choices.append(beacon['uuid'])
+        if len(choices) == 0:
+            print('No unprovisioned device beacons to choose from\n')
+            return None
+        print('Select unprovisioned device beacon:')
+        choice = self.__get_choice(choices)
+        if choice is None or choice == -1:
+            return choice
+        return self.__beacons[choice]['uuid']
+
+    def request_beacons(self):
         ''' Request a list of unprovisioned beacons from the gateway '''
         print("Acquiring unprovisioned device beacons from gateway...\n")
-        publish(self.__BEACON_REQ)
-
-        if not sem.acquire():
+        self.__publish(self.__BEACON_REQ)
+        if not self.__sem.acquire():
             return
-
         self.__print_beacons()
 
-    def evt(self, event, sem):
+    def evt(self, event):
         ''' Recieve beacon list event from gateway '''
         self.__beacons = event['beacons'].copy()
-        sem.release()
+        self.__sem.release()

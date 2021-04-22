@@ -18,7 +18,8 @@ class Subnets():
             }
     __subnets = [dict]
 
-    def __init__(self, get_choice, publish):
+    def __init__(self, sem, get_choice, publish):
+        self.__sem = sem
         self.__get_choice = get_choice
         self.__publish = publish
 
@@ -31,11 +32,11 @@ class Subnets():
             print('    No Subnets')
         print()
 
-    def get_choice(self, sem):
+    def get_choice(self):
         ''' Get a subnet selection from the user '''
         print('Acquiring subnets from gateway...')
         self.__publish(self.__SUBNET_REQ)
-        if not sem.acquire():
+        if not self.__sem.acquire():
             return None
         choices = []
         for subnet in self.__subnets:
@@ -44,17 +45,22 @@ class Subnets():
             print('No subnets to choose from. Try adding subnets to the gateway first.')
             return None
         print('Select a subnet:')
-        return self.__subnets[self.__get_choice(choices)]['netIndex']
+        choice = self.__get_choice(choices)
+        if choice is None or choice == -1:
+            return choice
+        return self.__subnets[choice]['netIndex']
 
-    def evt(self, event, sem):
+    def evt(self, event):
         ''' Recieve a subnet list event from the gateway '''
         self.__subnets = event['subnetList'].copy()
-        sem.release()
+        self.__sem.release()
 
-    def menu(self, sem):
+    def menu(self):
         ''' Run subnet menu for user '''
         print('SUBNET CONFIGURATION MENU')
         choice = self.__get_choice(self.__MENU_CHOICES)
+        if choice is None or choice == -1:
+            return choice
 
         if self.__MENU_CHOICES[choice] == 'Add Subnet':
             net_key = input('Enter 128-bit network key in hexadecimal format: ')
@@ -70,7 +76,7 @@ class Subnets():
                     }
             print('Adding subnet...')
             self.__publish(subnet_add)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()
 
@@ -86,13 +92,13 @@ class Subnets():
                     }
             print('Generating subnet...')
             self.__publish(subnet_gen)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()
 
         elif self.__MENU_CHOICES[choice] == 'Delete Subnet':
             self.__publish(self.__SUBNET_REQ)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
 
             choices = []
@@ -106,6 +112,8 @@ class Subnets():
 
             print('Which subnet would you like to delete?')
             choice = self.__get_choice(choices)
+            if choice is None or choice == -1:
+                return choice
 
             subnet_del = {
                     'id': 'randomId',
@@ -117,13 +125,13 @@ class Subnets():
                     }
             print('Deleteing subnet...')
             self.__publish(subnet_del)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()
 
         elif self.__MENU_CHOICES[choice] == 'Get Subnets':
             print('Getting subnets...')
             self.__publish(self.__SUBNET_REQ)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()

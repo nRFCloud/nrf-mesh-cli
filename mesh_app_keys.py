@@ -1,4 +1,4 @@
-''' Bluetooth mesh appliucaiton key module '''
+''' Bluetooth mesh application key module '''
 from byte_codec import uint16
 
 class App_Keys():
@@ -18,7 +18,9 @@ class App_Keys():
             }
     __app_keys = [dict]
 
-    def __init__(self, get_choice, publish):
+    def __init__(self, sem, subnets, get_choice, publish):
+        self.__sem = sem
+        self.__subnets = subnets
         self.__get_choice = get_choice
         self.__publish = publish
 
@@ -32,11 +34,11 @@ class App_Keys():
             print('     No Application Keys')
         print()
 
-    def get_choice(self, sem):
+    def get_choice(self):
         ''' Get an application key selection from the user '''
         print('Acquiring application keys from gateway...')
         self.__publish(self.__APP_KEY_REQ)
-        if not sem.acquire():
+        if not self.__sem.acquire():
             return None
         choices = []
         for app_key in self.__app_keys:
@@ -47,21 +49,26 @@ class App_Keys():
             )
             return None
         print('Select an applicaiton key:')
-        return self.__app_keys[self.__get_choice(choices)]['appIndex']
+        choice = self.__get_choice(choices)
+        if choice is None or choice == -1:
+             return choice
+        return self.__app_keys[choice]['appIndex']
 
-    def evt(self, event, sem):
+    def evt(self, event):
         ''' Recieve an application key list from the gateway '''
         self.__app_keys = event['appKeyList'].copy()
-        sem.release()
+        self.__sem.release()
 
-    def menu(self, sem, subnets):
+    def menu(self):
         print('APPLICATION KEY CONFIGURATION MENU')
         choice = self.__get_choice(self.__MENU_CHOICES)
+        if choice is None or choice == -1:
+            return choice
 
         if self.__MENU_CHOICES[choice] == 'Add Application Key':
-            net_idx = subnets.get_choice(sem)
-            if net_idx is None:
-                return
+            net_idx = self.__subnets.get_choice()
+            if net_idx is None or net_idx == -1:
+                return net_idx
             app_key = input('\nEnter 128-bit application key in hexadecimal format: ')
             app_idx = int(
                     input('Enter unsigned 16-bit application index for the application key: '), 0)
@@ -77,14 +84,14 @@ class App_Keys():
                     }
             print('Adding application key...')
             self.__publish(app_key_add)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()
 
         elif self.__MENU_CHOICES[choice] == 'Generate Application Key':
-            net_idx = subnets.get_choice(sem)
-            if net_idx is None:
-                return
+            net_idx = self.__subnets.get_choice()
+            if net_idx is None or net_idx == -1:
+                return net_idx
             app_idx = int(
                     input('\nEnter unsigned 16-bit application index for the application key: '), 0)
             app_key_gen = {
@@ -98,13 +105,13 @@ class App_Keys():
                     }
             print('Generating application key...')
             self.__publish(app_key_gen)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()
 
         elif self.__MENU_CHOICES[choice] == 'Delete Application Key':
             self.__publish(self.__APP_KEY_REQ)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             choices = []
             for app_key in self.__app_keys:
@@ -114,6 +121,8 @@ class App_Keys():
                 return
             print('Which application key would you like to delete?')
             choice = self.__get_choice(choices)
+            if choice is None or choice == -1:
+                return choice
             app_idx = int(choices[choice], 0)
             app_key_del = {
                     'id': 'randomId',
@@ -125,13 +134,13 @@ class App_Keys():
                     }
             print('Deleting application key...')
             self.__publish(app_key_del)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()
 
         elif self.__MENU_CHOICES[choice] == 'Get Application Keys':
             print('Getting application keys...')
             self.__publish(self.__APP_KEY_REQ)
-            if not sem.acquire():
+            if not self.__sem.acquire():
                 return
             self.__print()
