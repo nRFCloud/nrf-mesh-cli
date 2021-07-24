@@ -113,9 +113,9 @@ class Node():
                 print('        SIG Model ' + uint16(model['modelId']) + ' - ' +
                         MODEL_ID_PARSE[model['modelId']])
                 print('            Application Keys:')
-                if len(model['appKeyIndexes']) == 0:
+                if len(model['appIndexes']) == 0:
                     print('              None')
-                for app_key in model['appKeyIndexes']:
+                for app_key in model['appIndexes']:
                     print('            - ' + uint16(app_key))
                 print('            Subscribed Addresses:')
                 if len(model['subscribeAddresses']) == 0:
@@ -125,7 +125,7 @@ class Node():
                 print('            Publish Parameters:')
                 pub = model['publishParameters']
                 print('                Address               : ' + uint16(pub['address']))
-                print('                Application Key Index : ' + uint16(pub['appKeyIndex']))
+                print('                Application Index     : ' + uint16(pub['appIndex']))
                 if pub['friendCredentialFlag']:
                     print('                Friend Credential Flag: Enabled')
                 else:
@@ -140,9 +140,9 @@ class Node():
                 print('        Vendor Model ' + uint16(model['modelId']))
                 print('            Vendor ID: ' + uint16(model['companyId']))
                 print('            Application Keys:')
-                if len(model['appKeyIndex']) == 0:
+                if len(model['appIndex']) == 0:
                     print('              None')
-                for app_key in model['appKeyIndex']:
+                for app_key in model['appIndex']:
                     print('            - ' + uint16(app_key))
                 print('            Subscribed Addresses:')
                 if len(model['subscribeAddresses']) == 0:
@@ -152,7 +152,7 @@ class Node():
                 print('            Publish Parameters:')
                 pub = model['publishParameters']
                 print('                Address               : ' + uint16(pub['address']))
-                print('                Application Key Index : ' + uint16(pub['appKeyIndex']))
+                print('                Application Key Index : ' + uint16(pub['appIndex']))
                 if pub['friendCredentialFlag']:
                     print('                Friend Credential Flag: Enabled')
                 else:

@@ -37,7 +37,7 @@ class Subscriptions():
                     'type': 'operation',
                     'operation': {
                         'type': 'subscribe',
-                        'address_list': [
+                        'addressList': [
                             {
                                 'address': addr
                                 }
@@ -75,7 +75,7 @@ class Subscriptions():
                     'type': 'operation',
                     'operation': {
                         'type': 'unsubscribe',
-                        'address_list': [
+                        'addressList': [
                             {
                                 'address': addr
                                 }
@@ -105,5 +105,5 @@ class Subscriptions():
 
     def evt(self, event):
         ''' Recieve subscription list from gateway '''
-        self.__subscriptions = event['address_list'].copy()
+        self.__subscriptions = event['addressList'].copy()
         self.__sem.release()

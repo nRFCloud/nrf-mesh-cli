@@ -29,7 +29,7 @@ class Provision():
         if uuid is None or uuid == -1:
             return uuid
         net_idx = self.__subnets.get_choice()
-        if net_idx is None or ned_idx == -1:
+        if net_idx is None or net_idx == -1:
             return net_idx
         while True:
             try:
