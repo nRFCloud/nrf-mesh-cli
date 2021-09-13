@@ -10,6 +10,7 @@ import sync_sem
 import mesh_beacons
 import mesh_subnets
 import mesh_app_keys
+import mesh_health
 import mesh_provision
 import mesh_reset
 import mesh_nodes
@@ -61,6 +62,7 @@ subnets = mesh_subnets.Subnets(sem, get_choice, publish_mqtt)
 app_keys = mesh_app_keys.App_Keys(sem, subnets, get_choice, publish_mqtt)
 provision = mesh_provision.Provision(sem, beacons, subnets, publish_mqtt)
 nodes = mesh_nodes.Nodes(sem, get_choice, publish_mqtt)
+health = mesh_health.Health(sem, app_keys, nodes, get_choice, publish_mqtt)
 node = mesh_node.Node(sem, nodes, subnets, app_keys, get_choice, publish_mqtt)
 reset = mesh_reset.Reset(sem, nodes, publish_mqtt)
 subscriptions = mesh_subscriptions.Subscriptions(sem, get_choice, publish_mqtt)
@@ -72,6 +74,11 @@ event_dispatch = {
         'reset_result': reset.evt,
         'subnet_list': subnets.evt,
         'app_key_list': app_keys.evt,
+        'health_faults_current': health.cur_faults_evt,
+        'health_faults_registered': health.reg_faults_evt,
+        'health_period': health.period_evt,
+        'health_attention': health.attn_evt,
+        'health_client_timeout': health.timeout_evt,
         'node_list': nodes.evt,
         'node_discover_result': node.discover_evt,
         'subscribe_list': subscriptions.evt,
@@ -103,12 +110,13 @@ def on_message(_client, _userdata, msg):
         print('2. Provision device')
         print('3. Configure network subnets')
         print('4. Configure network application keys')
-        print('5. View network nodes')
-        print('6. Discover a network node')
-        print('7. Configure a network node')
-        print('8. Reset a network node')
-        print('9. Configure mesh model subscriptions')
-        print('10. Send mesh model message')
+        print('5. Health Client Interface')
+        print('6. View network nodes')
+        print('7. Discover a network node')
+        print('8. Configure a network node')
+        print('9. Reset a network node')
+        print('10. Configure mesh model subscriptions')
+        print('11. Send mesh model message')
         print('\n>', end='')
 
 def on_subscribe(_client, _userdata, _midi, granted_qos):
@@ -153,6 +161,7 @@ def main_menu():
                 'Provision device',
                 'Configure network subnets',
                 'Configure network application keys',
+                'Health client interface',
                 'View network nodes',
                 'Discover a network node',
                 'Configure a network node',
@@ -177,6 +186,8 @@ def main_menu():
             subnets.menu()
         elif menu_options[choice] == 'Configure network application keys':
             app_keys.menu()
+        elif menu_options[choice] == 'Health client interface':
+            health.menu()
         elif menu_options[choice] == 'View network nodes':
             nodes.get()
         elif menu_options[choice] == 'Discover a network node':
@@ -222,8 +233,8 @@ device = get_choice(device_list)
 if device is None or device == -1:
     sys.exit()
 
-c2g_topic = mqtt_topic_prefix + 'm/gateways/' + device_list[int(device)] + '/c2g'
-g2c_topic = mqtt_topic_prefix + 'm/gateways/' + device_list[int(device)] + '/g2c'
+g2c_topic = mqtt_topic_prefix + 'm/d/' + device_list[int(device)] + '/d2c'
+c2g_topic = mqtt_topic_prefix + 'm/d/' + device_list[int(device)] + '/c2d'
 print('    Cloud-to-Gateway MQTT Topic: ' + c2g_topic)
 print('    Gateway-to-Cloud MQTT Topic: ' + g2c_topic)
 

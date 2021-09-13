@@ -504,5 +504,11 @@ class Models():
             print('Recieved unsupported mesh model message:')
             self.__print_msg_details(event)
             print('    Opcode: ' + hex(event['opcode']))
-
-
+            print('    Payload: ', end='')
+            payload = event['payload']
+            if len(payload):
+                for byte in payload:
+                    print(uint8(byte['byte']), end=' ')
+                print()
+            else:
+                print('None')

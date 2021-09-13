@@ -13,7 +13,7 @@ class Subscriptions():
         self.__sem = sem
         self.__get_choice = get_choice
         self.__publish = publish
-        self.____subsciptions = [dict]
+        self.__subsciptions = [dict]
 
     def __print(self):
         print('Subscribed Addresses:')

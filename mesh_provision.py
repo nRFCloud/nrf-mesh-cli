@@ -38,7 +38,7 @@ class Provision():
                 print('Invalid address')
                 continue
             break
-        attn_time = int(input('Enter the attention timer for the provisioning process: '))
+        attn = int(input('Enter the attention timer for the provisioning process: '))
         print('Provisioning ' + uuid + '. This may take several minutes.')
         prov = {
                 'id': 'randomId',
@@ -48,7 +48,7 @@ class Provision():
                     'uuid': uuid,
                     'netIndex': net_idx,
                     'address': addr,
-                    'attentionTime': attn_time
+                    'attention': attn
                     }
                 }
         self.__publish(prov)
