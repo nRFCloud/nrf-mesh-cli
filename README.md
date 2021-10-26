@@ -30,22 +30,22 @@ In order to set up mesh network nodes, the following steps must be performed:
 4. Bind the new application key to the desired model within the element of the desired node.
 5. Set the publish parameters of the model within the element of the desired node. This includes
 setting the publish address which this models messages with be sent on.
-6. Add subscribe addresses as needed so that the desired model can recieve the appropriate model
+6. Add subscribe addresses as needed so that the desired model can receive the appropriate model
 messages being published by other models in the mesh network.
 
 ### Subscribing to Mesh Addresses
-To recieve Bluetooth mesh model messages that are transmitted within the mesh network, you must
+To receive Bluetooth mesh model messages that are transmitted within the mesh network, you must
 subscribe to mesh addresses of interest. Any model message destined for an address which you have
 subscribed to will be relayed by the gateway.
 
 #### Example
 A bluetooth mesh node which acts as a light bulb is configured with a publish address of 0xC000.
-In order to recieve state change status messages from the light bulb, you must subscribe to address
+In order to receive state change status messages from the light bulb, you must subscribe to address
 0xC000. Now, when any other model within themesh network sends a state SET message to the light
 bulb, the light bulb will publish its state change status message to address 0xC000 and the gateway
 will relay this status message to the cloud (this application).
 
-It is also common to subscribe to the unicast address of the gateway itself (0x0001) to recieve
+It is also common to subscribe to the unicast address of the gateway itself (0x0001) to receive
 acknowledgement model messages for SET messages which originated from the gateway.
 
 ## Usage
@@ -88,9 +88,9 @@ screen.
     9. Unbind Application Key - Unbind an application key from a mesh model on a node.
     10. Set Publish Parameters - Set the publish parameters for a mesh model on a node.
     11. Add Subscribe Address - Add a subscribe address to a mesh model on a node so that it can
-    recieve messages from other mesh models on the network.
+    receive messages from other mesh models on the network.
     12. Delete Subscribe Address - Delete a subscribe address from a node so that it no longer
-    recieved messages from other mesh models on the network.
+    received messages from other mesh models on the network.
     13. Overwrite Subscribe Address - Overwrite all existing subscribe address on a node with one
     new subscribe address.
 8. Reset a network node - Un-provision a node so that it no longer participates in the mesh network
