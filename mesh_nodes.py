@@ -59,6 +59,6 @@ class Nodes():
         self.__print()
 
     def evt(self, event):
-        ''' Recieve list of nodes from gateway '''
+        ''' Receive list of nodes from gateway '''
         self.__nodes = event['nodes'].copy()
         self.__sem.release()

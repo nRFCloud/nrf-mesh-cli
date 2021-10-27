@@ -581,7 +581,7 @@ class Node():
         self.__print()
 
     def discover_evt(self, event):
-        ''' Recieve node discovery event from gateway '''
+        ''' Receive node discovery event from gateway '''
         if event['error'] != 0:
             print('Error performing node discovery: ' + str(event['error']))
             self.__node = {}

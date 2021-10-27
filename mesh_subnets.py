@@ -51,7 +51,7 @@ class Subnets():
         return self.__subnets[choice]['netIndex']
 
     def evt(self, event):
-        ''' Recieve a subnet list event from the gateway '''
+        ''' Receive a subnet list event from the gateway '''
         self.__subnets = event['subnetList'].copy()
         self.__sem.release()
 

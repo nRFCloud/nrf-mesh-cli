@@ -421,7 +421,7 @@ class Models():
         print('    Destination Address: ' + uint16(event['destinationAddress']))
 
     def evt(self, event):
-        ''' Recieve bluetooth mesh model message from gateway '''
+        ''' Receive bluetooth mesh model message from gateway '''
         if event['opcode'] == MODEL_MSG_OPCODES['Generic OnOff Get']:
             print('Generic OnOff Get:')
             self.__print_msg_details(event)
@@ -501,7 +501,7 @@ class Models():
         #elif event['opcode'] == MODEL_MSG_OPCODES['Generic User Property Set Unacknowledged']:
         #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Client Properties Get']:
         else:
-            print('Recieved unsupported mesh model message:')
+            print('Received unsupported mesh model message:')
             self.__print_msg_details(event)
             print('    Opcode: ' + hex(event['opcode']))
             print('    Payload: ', end='')

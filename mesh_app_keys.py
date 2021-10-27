@@ -55,7 +55,7 @@ class App_Keys():
         return self.__app_keys[choice]['appIndex']
 
     def evt(self, event):
-        ''' Recieve an application key list from the gateway '''
+        ''' Receive an application key list from the gateway '''
         self.__app_keys = event['appKeyList'].copy()
         self.__sem.release()
 
