@@ -52,6 +52,6 @@ class Beacons():
         self.__print_beacons()
 
     def evt(self, event):
-        ''' Recieve beacon list event from gateway '''
+        ''' Receive beacon list event from gateway '''
         self.__beacons = event['beacons'].copy()
         self.__sem.release()
