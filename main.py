@@ -82,7 +82,7 @@ event_dispatch = {
         'node_list': nodes.evt,
         'node_discover_result': node.discover_evt,
         'subscribe_list': subscriptions.evt,
-        'recieve_model_message': models.evt
+        'receive_model_message': models.evt
         }
 
 def on_connect(_client, _userdata, _flags, r_c):
@@ -92,7 +92,7 @@ def on_connect(_client, _userdata, _flags, r_c):
     _client.subscribe(g2c_topic)
 
 def on_message(_client, _userdata, msg):
-    ''' On MQTT message recieve callback'''
+    ''' On MQTT message receive callback'''
     msg_json = json.loads(msg.payload)
     if msg_json['type'] != 'event':
         return
