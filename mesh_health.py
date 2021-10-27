@@ -30,7 +30,7 @@ class Health():
         self.__timeout = None
 
     def cur_faults_evt(self, event):
-        print('Recieved current health faults:')
+        print('Received current health faults:')
         print('    Address   : ' + uint16(event['address']))
         print('    Test ID   : ' + uint8(event['testId']))
         print('    Company ID: ' + uint16(event['companyId']))

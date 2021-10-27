@@ -104,6 +104,6 @@ class Subscriptions():
             self.__print()
 
     def evt(self, event):
-        ''' Recieve subscription list from gateway '''
+        ''' Receive subscription list from gateway '''
         self.__subscriptions = event['addressList'].copy()
         self.__sem.release()
