@@ -432,15 +432,17 @@ class Models():
             print('Generic OnOff Set:')
             self.__print_msg_details(event)
             payload = event['payload']
-            if payload[0]['byte']:
-                print('    OnOff: ON')
-            else:
-                print('    OnOff: OFF')
-            print('    TID: ' + uint8(payload[1]))
-            if len(payload) > 2:
-                print('    Transition Time: ' + uint8(payload[2]))
-            if len(payload) > 3:
-                print('    Delay: ' + uint8(payload[3]))
+            if payload is not None and len(payload) > 0:
+                if payload[0]['byte']:
+                    print('    OnOff: ON')
+                else:
+                    print('    OnOff: OFF')
+                if len(payload) > 1:
+                    print('    TID: ' + uint8(payload[1]['byte']))
+                if len(payload) > 2:
+                    print('    Transition Time: ' + uint8(payload[2]['byte']))
+                if len(payload) > 3:
+                    print('    Delay: ' + uint8(payload[3]['byte']))
 
         elif event['opcode'] == MODEL_MSG_OPCODES['Generic OnOff Status']:
             print('Generic OnOff Status:')
@@ -456,7 +458,7 @@ class Models():
                 else:
                     print('    Target OnOff: OFF')
             if len(payload) > 2:
-                print('    Remaining Time: ' + uint8(payload[2]))
+                print('    Remaining Time: ' + uint8(payload[2]['byte']))
 
         #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Level Get']:
         #elif event['opcode'] == MODEL_MSG_OPCODES['Generic Level Set']:

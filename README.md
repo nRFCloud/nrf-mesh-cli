@@ -26,7 +26,7 @@ In order to set up mesh network nodes, the following steps must be performed:
 
 1. Add or generate a new subnet on the gateway if a subnet other than the primary subnet is desired.
 2. Provision a new device into the mesh network using the desired subnet.
-3. Add or generate a new applicaiton key on the gateway.
+3. Add or generate a new application key on the gateway.
 4. Bind the new application key to the desired model within the element of the desired node.
 5. Set the publish parameters of the model within the element of the desired node. This includes
 setting the publish address which this models messages with be sent on.
@@ -64,7 +64,7 @@ gateway. A list of the unprovisioned device beacons will be printed to the scree
 enter provisioning details.
 3. Configure network subnets - Add, Generate, Delete, or Get subnets for the gateway. You will be
 prompted to enter subnet details.
-4. Configure network applicaiton keys - Add, Genreate, Delete, or Get application keys for the
+4. Configure network application keys - Add, Genreate, Delete, or Get application keys for the
 gateway. You will be prompted to enter application key details.
 5. View network nodes - Get a list of network nodes. A list of network nodes will be printed to the
 screen.
@@ -84,7 +84,7 @@ screen.
     6. Add Subnet - Add a Subnet to a node to allow it to participate in a new subnet.
     7. Delete Subnet - Delete a Subnet from a node to prevent it from participating ina subnet any
     longer.
-    8. Bind Application Key - Bind an applicaiton key to a mesh model on a node.
+    8. Bind Application Key - Bind an application key to a mesh model on a node.
     9. Unbind Application Key - Unbind an application key from a mesh model on a node.
     10. Set Publish Parameters - Set the publish parameters for a mesh model on a node.
     11. Add Subscribe Address - Add a subscribe address to a mesh model on a node so that it can

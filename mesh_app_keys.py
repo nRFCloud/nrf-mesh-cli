@@ -48,8 +48,11 @@ class App_Keys():
             'No application keys to choose from. Try adding application keys to the gateway first.'
             )
             return None
-        print('Select an applicaiton key:')
-        choice = self.__get_choice(choices)
+        if len(choices) == 1:
+            choice = 0
+        else:
+            print('Select an application key:')
+            choice = self.__get_choice(choices)
         if choice is None or choice == -1:
              return choice
         return self.__app_keys[choice]['appIndex']
