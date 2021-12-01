@@ -44,8 +44,11 @@ class Subnets():
         if len(choices) == 0:
             print('No subnets to choose from. Try adding subnets to the gateway first.')
             return None
-        print('Select a subnet:')
-        choice = self.__get_choice(choices)
+        if len(choices) == 1:
+            choice = 0
+        else:
+            print('Select a subnet:')
+            choice = self.__get_choice(choices)
         if choice is None or choice == -1:
             return choice
         return self.__subnets[choice]['netIndex']

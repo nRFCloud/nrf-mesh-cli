@@ -1,4 +1,5 @@
 ''' Bluetooth Mesh LTE CLI Main Module'''
+import argparse
 import sys
 import json
 import threading
@@ -26,6 +27,23 @@ KEEP_ALIVE          = 30
 
 live = True
 getting_input = False
+api_key = None
+device_id = None
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Device Credentials Installer",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument("-a", "--apikey", type=str,
+                        help="nRF Cloud account API key",
+                        default=None)
+    parser.add_argument("-v", "--verbose",
+                        help="bool: Make output verbose",
+                        action='store_true', default=False)
+    parser.add_argument("-d", "--deviceid", type=str,
+                        help="Mesh gateway device ID",
+                        default=None)
+    return parser.parse_args()
 
 def publish_mqtt(msg):
     ''' Publish mqtt message to mesh gateway '''
@@ -167,7 +185,8 @@ def main_menu():
                 'Configure a network node',
                 'Reset a network node',
                 'Configure mesh model subscriptions',
-                'Send mesh model message'
+                'Send mesh model message',
+                'Quit'
                 ]
 
         print("MAIN MENU")
@@ -200,9 +219,17 @@ def main_menu():
             subscriptions.menu()
         elif menu_options[choice] == 'Send mesh model message':
             models.send_msg()
+        elif menu_options[choice] == 'Quit':
+            live = False
 
 print('nRF Cloud Bluetooth Mesh Gateway Interface')
-api_key = input("Enter your nRF Cloud API key: ")
+args = parse_args()
+verbose = args.verbose
+api_key = args.apikey
+device_id = args.deviceid
+
+if api_key is None:
+    api_key = input("Enter your nRF Cloud API key: ")
 
 print('\nQuerying nRF Cloud for account details...')
 resp = http_req(ACC_URL, api_key)
@@ -228,13 +255,15 @@ for device in resp['items']:
     print('    Created On : ' + device['$meta']['createdAt'])
     print('    Version    : ' + device['$meta']['version'] + '\n')
 
-print ('\nSelect which gateway device to interface with:')
-device = get_choice(device_list)
-if device is None or device == -1:
-    sys.exit()
+if device_id is None:
+    print ('\nSelect which gateway device to interface with:')
+    device = get_choice(device_list)
+    if device is None or device == -1:
+        sys.exit()
+    device_id = device_list[int(device)]
 
-g2c_topic = mqtt_topic_prefix + 'm/d/' + device_list[int(device)] + '/d2c'
-c2g_topic = mqtt_topic_prefix + 'm/d/' + device_list[int(device)] + '/c2d'
+g2c_topic = mqtt_topic_prefix + 'm/d/' + device_id + '/d2c'
+c2g_topic = mqtt_topic_prefix + 'm/d/' + device_id + '/c2d'
 print('    Cloud-to-Gateway MQTT Topic: ' + c2g_topic)
 print('    Gateway-to-Cloud MQTT Topic: ' + g2c_topic)
 
